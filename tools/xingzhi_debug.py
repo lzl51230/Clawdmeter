@@ -105,6 +105,15 @@ def read_status_response(serial_port) -> dict[str, str]:
             raise RuntimeError(line)
 
 
+def read_action_response(serial_port) -> dict[str, str]:
+    while True:
+        line = read_line_text(serial_port)
+        if line.startswith("XDBG ACTION "):
+            return parse_key_values(line)
+        if line.startswith("XDBG ERROR "):
+            raise RuntimeError(line)
+
+
 def read_exact(serial_port, byte_count: int) -> bytes:
     chunks: list[bytes] = []
     remaining = byte_count
@@ -209,6 +218,14 @@ def build_parser() -> argparse.ArgumentParser:
     screenshot.add_argument("--output", type=Path, default=Path("xingzhi-screenshot.bmp"), help="Output .bmp or .ppm path")
     screenshot.add_argument("--raw-output", type=Path, help="Optional raw RGB565 output path")
 
+    button = subcommands.add_parser("button", help="Simulate a Xingzhi button action")
+    button.add_argument("button", choices=["cycle", "screen", "1", "space", "2", "shift_tab", "shift-tab", "tab", "3"])
+    button.add_argument("--event", choices=["click", "press", "release"], default="click", help="Simulated button event")
+    button.add_argument("--port", default=DEFAULT_PORT, help="Serial port, for example COM7")
+    button.add_argument("--baud", type=int, default=DEFAULT_BAUD, help="Serial baud rate")
+    button.add_argument("--timeout", type=float, default=3.0, help="Serial read timeout in seconds")
+    button.add_argument("--settle-delay", type=float, default=0.4, help="Delay after opening the port")
+
     return parser
 
 
@@ -231,6 +248,13 @@ def run(
                 status = read_status_response(serial_port)
                 for key in sorted(status):
                     print(f"{key}={status[key]}", file=stdout)
+                return 0
+
+            if args.command == "button":
+                write_command(serial_port, f"XDBG BUTTON {args.button} {args.event}\n".encode("ascii"))
+                action = read_action_response(serial_port)
+                for key in sorted(action):
+                    print(f"{key}={action[key]}", file=stdout)
                 return 0
 
             write_command(serial_port, SCREENSHOT_COMMAND)

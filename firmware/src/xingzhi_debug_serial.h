@@ -7,12 +7,15 @@ enum class XingzhiDebugCommandType {
     None,
     Status,
     Screenshot,
+    Button,
     Unknown,
 };
 
 struct XingzhiDebugCommand {
     XingzhiDebugCommandType type = XingzhiDebugCommandType::None;
     char token[24] = {};
+    char arg1[24] = {};
+    char arg2[24] = {};
 };
 
 struct XingzhiDebugStatus {
@@ -26,6 +29,10 @@ struct XingzhiDebugStatus {
     uint32_t uptime_ms = 0;
     const char *framebuffer = "";
     const char *detail = "";
+    const char *action = "";
+    const char *event = "";
+    uint32_t action_count = 0;
+    const char *action_error = "";
 };
 
 bool xingzhi_debug_is_usage_payload(const char *line);

@@ -83,6 +83,10 @@ XingzhiDebugCommand xingzhi_debug_parse_command(const char *line) {
         command.type = XingzhiDebugCommandType::Status;
     } else if (token_equals(token, "SCREENSHOT")) {
         command.type = XingzhiDebugCommandType::Screenshot;
+    } else if (token_equals(token, "BUTTON")) {
+        command.type = XingzhiDebugCommandType::Button;
+        read_token(&cursor, command.arg1, sizeof(command.arg1));
+        read_token(&cursor, command.arg2, sizeof(command.arg2));
     } else {
         command.type = XingzhiDebugCommandType::Unknown;
     }
@@ -95,11 +99,13 @@ int xingzhi_debug_format_status(const XingzhiDebugStatus *status, char *buf, siz
     }
 
     char detail[40];
+    char action_error[40];
     sanitize_value(status->detail, detail, sizeof(detail));
+    sanitize_value(status->action_error, action_error, sizeof(action_error));
     return snprintf(
         buf,
         len,
-        "XDBG STATUS target=%s screen=%s width=%d height=%d payload=%s source=%s ble=%s uptime_ms=%lu framebuffer=%s detail=%s",
+        "XDBG STATUS target=%s screen=%s width=%d height=%d payload=%s source=%s ble=%s uptime_ms=%lu framebuffer=%s detail=%s action=%s event=%s action_count=%lu action_error=%s",
         safe_value(status->target),
         safe_value(status->screen),
         status->width,
@@ -109,7 +115,11 @@ int xingzhi_debug_format_status(const XingzhiDebugStatus *status, char *buf, siz
         safe_value(status->ble),
         static_cast<unsigned long>(status->uptime_ms),
         safe_value(status->framebuffer),
-        detail
+        detail,
+        safe_value(status->action),
+        safe_value(status->event),
+        static_cast<unsigned long>(status->action_count),
+        action_error
     );
 }
 

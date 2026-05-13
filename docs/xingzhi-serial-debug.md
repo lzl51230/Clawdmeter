@@ -42,6 +42,19 @@ XDBG SCREENSHOT_END
 
 主机工具会忽略 start marker 前的启动日志，并把 RGB565LE framebuffer 转为 `.bmp` 或 `.ppm`。
 
+## 模拟按键
+
+三颗按键可先通过串口模拟，后续实体 GPIO 和 HID 会复用同一动作分发器：
+
+```powershell
+py -3 tools\xingzhi_debug.py button cycle --event click --port COM7
+py -3 tools\xingzhi_debug.py button space --event press --port COM7
+py -3 tools\xingzhi_debug.py button space --event release --port COM7
+py -3 tools\xingzhi_debug.py button shift_tab --event click --port COM7
+```
+
+返回 `XDBG ACTION` 字段，包含 `ok`、`action`、`event`、`screen`、`count` 和 `message`。随后运行 `status` 可确认 `screen`、`action`、`event` 与 `action_count`。
+
 ## 用量 Fallback 验证
 
 BLE 尚未实现时，仍可通过串口发送测试 payload：

@@ -122,6 +122,25 @@ class XingzhiDebugToolTest(unittest.TestCase):
         self.assertEqual(serial_port.writes[0], b"XDBG STATUS\n")
         self.assertTrue(serial_port.flushed)
 
+    def test_button_command_writes_simulated_action(self):
+        serial_port = FakeSerial("COM9", 115200)
+        serial_port.read_buffer.extend(
+            b"XDBG ACTION ok=1 action=cycle event=click screen=status count=1\n"
+        )
+        stdout = io.StringIO()
+
+        code = xingzhi_debug.run(
+            ["button", "cycle", "--event", "click", "--port", "COM9"],
+            stdout=stdout,
+            stderr=io.StringIO(),
+            serial_factory=lambda *args, **kwargs: serial_port,
+            sleep_fn=lambda _: None,
+        )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(serial_port.writes[0], b"XDBG BUTTON cycle click\n")
+        self.assertIn("screen=status", stdout.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

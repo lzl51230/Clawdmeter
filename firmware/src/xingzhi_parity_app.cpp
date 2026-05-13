@@ -1,7 +1,9 @@
 #include <Arduino.h>
 #include <Arduino_GFX_Library.h>
+#include <string.h>
 
 #include "usage_input.h"
+#include "xingzhi_app_actions.h"
 #include "xingzhi_debug_serial.h"
 #include "xingzhi_display_cfg.h"
 #include "xingzhi_meter_ui.h"
@@ -48,6 +50,7 @@ UsageData usage = {};
 MeterPayloadState payload_state = MeterPayloadState::NoData;
 char payload_detail[40] = {};
 const char *last_payload_source = "none";
+XingzhiActionState action_state = {};
 bool display_ready = false;
 
 void set_backlight(bool on) {
@@ -82,15 +85,35 @@ void draw_meter() {
     if (!display_ready || !canvas.getFramebuffer()) {
         return;
     }
-    xingzhi_meter_ui_draw(&canvas, &usage, payload_state, payload_detail);
+    if (action_state.current_screen == XingzhiScreen::Usage) {
+        xingzhi_meter_ui_draw(&canvas, &usage, payload_state, payload_detail);
+    } else {
+        canvas.fillScreen(0x0000);
+        canvas.drawRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, 0x3D9F);
+        canvas.drawRect(2, 2, DISPLAY_WIDTH - 4, DISPLAY_HEIGHT - 4, 0x18E3);
+        canvas.setTextColor(0xFFFF);
+        canvas.setTextSize(2);
+        canvas.setCursor(18, 20);
+        canvas.print("Clawdmeter");
+        canvas.setTextSize(3);
+        canvas.setCursor(18, 78);
+        canvas.print(xingzhi_screen_name(action_state.current_screen));
+        canvas.setTextSize(1);
+        canvas.setTextColor(0x9CF3);
+        canvas.setCursor(18, 136);
+        canvas.print("U2 simulated screen");
+        canvas.setCursor(18, 158);
+        canvas.print("action=");
+        canvas.print(xingzhi_action_name(action_state.last_action));
+    }
     canvas.flush();
 }
 
 void send_status() {
-    char line[224];
+    char line[320];
     XingzhiDebugStatus status = {};
     status.target = "xingzhi_parity";
-    status.screen = "usage";
+    status.screen = xingzhi_screen_name(action_state.current_screen);
     status.width = DISPLAY_WIDTH;
     status.height = DISPLAY_HEIGHT;
     status.payload = payload_state_name();
@@ -99,6 +122,10 @@ void send_status() {
     status.uptime_ms = millis();
     status.framebuffer = framebuffer_state_name();
     status.detail = payload_detail;
+    status.action = xingzhi_action_name(action_state.last_action);
+    status.event = xingzhi_event_name(action_state.last_event);
+    status.action_count = action_state.action_count;
+    status.action_error = action_state.last_error;
     xingzhi_debug_format_status(&status, line, sizeof(line));
     Serial.println(line);
 }
@@ -107,6 +134,18 @@ void send_debug_error(const char *code, const char *message) {
     char line[128];
     xingzhi_debug_format_error(code, message, line, sizeof(line));
     Serial.println(line);
+}
+
+void send_action_result(XingzhiAction action, XingzhiActionEvent event, const XingzhiActionResult &result) {
+    Serial.printf(
+        "XDBG ACTION ok=%d action=%s event=%s screen=%s count=%lu message=%s\n",
+        result.ok ? 1 : 0,
+        xingzhi_action_name(action),
+        xingzhi_event_name(event),
+        xingzhi_screen_name(action_state.current_screen),
+        static_cast<unsigned long>(action_state.action_count),
+        result.message && result.message[0] ? result.message : "-"
+    );
 }
 
 void send_screenshot() {
@@ -168,6 +207,66 @@ void handle_payload_line(const char *line) {
     draw_meter();
 }
 
+bool parse_action(const char *token, XingzhiAction *action) {
+    if (!token || !action) {
+        return false;
+    }
+    if (strcmp(token, "cycle") == 0 || strcmp(token, "screen") == 0 || strcmp(token, "1") == 0) {
+        *action = XingzhiAction::CycleScreen;
+        return true;
+    }
+    if (strcmp(token, "space") == 0 || strcmp(token, "2") == 0) {
+        *action = XingzhiAction::HidSpace;
+        return true;
+    }
+    if (
+        strcmp(token, "shift_tab") == 0 ||
+        strcmp(token, "shift-tab") == 0 ||
+        strcmp(token, "tab") == 0 ||
+        strcmp(token, "3") == 0
+    ) {
+        *action = XingzhiAction::HidShiftTab;
+        return true;
+    }
+    return false;
+}
+
+bool parse_event(const char *token, XingzhiActionEvent *event) {
+    if (!event) {
+        return false;
+    }
+    if (!token || token[0] == '\0' || strcmp(token, "click") == 0) {
+        *event = XingzhiActionEvent::Click;
+        return true;
+    }
+    if (strcmp(token, "press") == 0) {
+        *event = XingzhiActionEvent::Press;
+        return true;
+    }
+    if (strcmp(token, "release") == 0) {
+        *event = XingzhiActionEvent::Release;
+        return true;
+    }
+    return false;
+}
+
+void handle_button_command(const XingzhiDebugCommand &command) {
+    XingzhiAction action = XingzhiAction::None;
+    XingzhiActionEvent event = XingzhiActionEvent::Click;
+    if (!parse_action(command.arg1, &action)) {
+        send_debug_error("unknown_button", command.arg1);
+        return;
+    }
+    if (!parse_event(command.arg2, &event)) {
+        send_debug_error("unknown_event", command.arg2);
+        return;
+    }
+
+    XingzhiActionResult result = xingzhi_actions_dispatch(&action_state, action, event);
+    draw_meter();
+    send_action_result(action, event, result);
+}
+
 void handle_debug_line(const char *line) {
     XingzhiDebugCommand command = xingzhi_debug_parse_command(line);
     switch (command.type) {
@@ -176,6 +275,9 @@ void handle_debug_line(const char *line) {
         break;
     case XingzhiDebugCommandType::Screenshot:
         send_screenshot();
+        break;
+    case XingzhiDebugCommandType::Button:
+        handle_button_command(command);
         break;
     case XingzhiDebugCommandType::None:
         break;
@@ -230,6 +332,7 @@ void setup() {
     usage.weekly_reset_mins = -1;
     usage.ok = false;
     usage.valid = false;
+    xingzhi_actions_init(&action_state);
 
     Serial.println();
     log_config();

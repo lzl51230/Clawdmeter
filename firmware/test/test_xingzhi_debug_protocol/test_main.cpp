@@ -17,6 +17,11 @@ void test_debug_command_parser_accepts_known_commands() {
 
     command = xingzhi_debug_parse_command("XDBG SCREENSHOT");
     TEST_ASSERT_EQUAL(XingzhiDebugCommandType::Screenshot, command.type);
+
+    command = xingzhi_debug_parse_command("XDBG BUTTON cycle click");
+    TEST_ASSERT_EQUAL(XingzhiDebugCommandType::Button, command.type);
+    TEST_ASSERT_EQUAL_STRING("cycle", command.arg1);
+    TEST_ASSERT_EQUAL_STRING("click", command.arg2);
 }
 
 void test_debug_command_parser_reports_unknown_commands() {
@@ -39,7 +44,7 @@ void test_status_line_is_bounded_and_parseable() {
     status.framebuffer = "ready";
     status.detail = "allowed";
 
-    char line[192];
+    char line[256];
     int written = xingzhi_debug_format_status(&status, line, sizeof(line));
 
     TEST_ASSERT_GREATER_THAN(0, written);
