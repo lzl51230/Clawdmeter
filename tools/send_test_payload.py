@@ -65,9 +65,17 @@ def write_payload(
             import serial
         except ImportError as exc:
             raise RuntimeError("pyserial is required. Install it with: py -3 -m pip install pyserial") from exc
-        serial_factory = serial.Serial
+        serial_port = serial.Serial()
+        serial_port.port = port
+        serial_port.baudrate = baud
+        serial_port.timeout = 1
+        serial_port.dtr = False
+        serial_port.rts = False
+        serial_port.open()
+    else:
+        serial_port = serial_factory(port, baud, timeout=1)
 
-    with serial_factory(port, baud, timeout=1) as serial_port:
+    with serial_port:
         serial_port.dtr = False
         serial_port.rts = False
         if settle_delay > 0:
