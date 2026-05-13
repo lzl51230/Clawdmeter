@@ -70,3 +70,16 @@ py -3 tools\xingzhi_debug.py screenshot --port COM7 --output high.bmp
 ```
 
 通过闸门：状态里 `source=serial`、`payload=valid`，截图显示 high payload 的 session/weekly 读数。
+
+## BLE 写入验证
+
+BLE 固件刷写后，Windows 侧可用固定 payload 验证 GATT 写入：
+
+```powershell
+py -3 -m pip install bleak
+py -3 tools\windows_claude_usage_ble.py --test-preset high --require-ack
+py -3 tools\xingzhi_debug.py status --port COM7
+py -3 tools\xingzhi_debug.py screenshot --port COM7 --output ble-high.bmp
+```
+
+通过闸门：BLE 工具输出 `BLE write succeeded` 和 `Device acknowledged payload`；串口状态显示 `source=ble`、`payload=valid`、`detail=limited`，截图读数为 88%/82%。

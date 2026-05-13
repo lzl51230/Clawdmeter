@@ -10,6 +10,7 @@
 - 三屏 UI：usage、status、splash，通过 `button cycle --event click` 切换。
 - 动作分发器：`cycle`、`space`、`shift_tab` 已可串口模拟，实体按键和 HID 后续复用。
 - BLE GATT 用量通路：广播名 `Claude Controller`，沿用原版 service/RX/TX/REQ UUID，BLE payload 与串口 fallback 走同一解析器。
+- Windows BLE 调试 CLI：`tools/windows_claude_usage_ble.py` 可发送真实 Claude 用量或固定测试 payload。
 
 ## 构建与刷写
 
@@ -31,6 +32,19 @@ py -3 tools\xingzhi_debug.py button cycle --event click --port COM7
 U3 通过标准：连续执行两次 `button cycle` 后，`status` 分别报告 `screen=status` 和 `screen=splash`；每个屏幕都能截图回读为 240x240 图像。
 
 U4 通过标准：刷写后 `status` 报告 `ble=advertising`、空格安全的 `ble_name=Claude_Controller` 和 `ble_mac`；实际 BLE 广播名仍为 `Claude Controller`。status 屏截图显示 BLE 状态；串口 fallback 发送 `high` 后仍能更新 usage。
+
+U5 通过标准：Windows 侧安装 Bleak 后执行 `py -3 tools\windows_claude_usage_ble.py --test-preset high --require-ack`，工具报告 BLE write 和 TX ack 成功；随后串口 `status` 显示 `source=ble`、`payload=valid`、`detail=limited`，截图显示 high payload 的 88%/82% 读数。
+
+## Windows BLE 用量发送
+
+```powershell
+py -3 -m pip install bleak
+py -3 tools\windows_claude_usage_ble.py --test-preset high --require-ack
+py -3 tools\windows_claude_usage_ble.py --dry-run
+py -3 tools\windows_claude_usage_ble.py --watch
+```
+
+`--test-preset` 不访问 Claude API，适合先验证 BLE。真实用量模式读取 `%USERPROFILE%\.claude\.credentials.json` 内的 `accessToken`，调用 Claude Messages API 并把响应头压缩为 `{s,sr,w,wr,st,ok}` 后写入 RX characteristic。
 
 ## UI 屏幕
 
