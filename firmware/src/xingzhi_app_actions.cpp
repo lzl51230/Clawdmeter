@@ -149,3 +149,7 @@ const char *xingzhi_event_name(XingzhiActionEvent event) {
         return "click";
     }
 }
+
+bool xingzhi_action_is_hid(XingzhiAction action) {
+    return action == XingzhiAction::HidSpace || action == XingzhiAction::HidShiftTab;
+}

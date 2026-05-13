@@ -5,6 +5,7 @@
 #include "usage_input.h"
 #include "xingzhi_app_actions.h"
 #include "xingzhi_ble.h"
+#include "xingzhi_buttons.h"
 #include "xingzhi_debug_serial.h"
 #include "xingzhi_display_cfg.h"
 #include "xingzhi_meter_ui.h"
@@ -55,6 +56,10 @@ XingzhiActionState action_state = {};
 char last_ble_detail[40] = {};
 bool display_ready = false;
 
+constexpr uint8_t HID_KEY_SPACE = 0x2C;
+constexpr uint8_t HID_KEY_TAB = 0x2B;
+constexpr uint8_t HID_MOD_LEFT_SHIFT = 0x02;
+
 void set_backlight(bool on) {
     const bool level = on != BACKLIGHT_OUTPUT_INVERT;
     digitalWrite(PIN_LCD_BACKLIGHT, level ? HIGH : LOW);
@@ -103,7 +108,7 @@ void draw_meter() {
 }
 
 void send_status() {
-    char line[384];
+    char line[448];
     XingzhiDebugStatus status = {};
     status.target = "xingzhi_parity";
     status.screen = xingzhi_screen_name(action_state.current_screen);
@@ -114,6 +119,7 @@ void send_status() {
     status.ble = xingzhi_ble_state_name();
     status.ble_name = xingzhi_ble_device_name();
     status.ble_mac = xingzhi_ble_mac();
+    status.hid = xingzhi_ble_hid_available() ? "available" : "unavailable";
     status.uptime_ms = millis();
     status.framebuffer = framebuffer_state_name();
     status.detail = payload_detail;
@@ -141,6 +147,58 @@ void send_action_result(XingzhiAction action, XingzhiActionEvent event, const Xi
         static_cast<unsigned long>(action_state.action_count),
         result.message && result.message[0] ? result.message : "-"
     );
+}
+
+bool send_hid_press(XingzhiAction action) {
+    if (action == XingzhiAction::HidSpace) {
+        return xingzhi_ble_keyboard_press(HID_KEY_SPACE, 0);
+    }
+    if (action == XingzhiAction::HidShiftTab) {
+        return xingzhi_ble_keyboard_press(HID_KEY_TAB, HID_MOD_LEFT_SHIFT);
+    }
+    return true;
+}
+
+bool send_hid_release(XingzhiAction action) {
+    if (xingzhi_action_is_hid(action)) {
+        return xingzhi_ble_keyboard_release();
+    }
+    return true;
+}
+
+XingzhiActionResult apply_hid_side_effect(
+    XingzhiAction action,
+    XingzhiActionEvent event,
+    const XingzhiActionResult &input
+) {
+    XingzhiActionResult result = input;
+    if (!result.ok || !xingzhi_action_is_hid(action)) {
+        return result;
+    }
+
+    bool sent = false;
+    if (event == XingzhiActionEvent::Click) {
+        sent = send_hid_press(action) && send_hid_release(action);
+    } else if (event == XingzhiActionEvent::Press) {
+        sent = send_hid_press(action);
+    } else {
+        sent = send_hid_release(action);
+    }
+
+    if (sent) {
+        result.message = "hid_sent";
+        return result;
+    }
+
+    action_state.last_error = "hid_unavailable";
+    result.ok = false;
+    result.message = "hid_unavailable";
+    return result;
+}
+
+XingzhiActionResult execute_action(XingzhiAction action, XingzhiActionEvent event) {
+    XingzhiActionResult result = xingzhi_actions_dispatch(&action_state, action, event);
+    return apply_hid_side_effect(action, event, result);
 }
 
 void send_screenshot() {
@@ -313,9 +371,35 @@ void handle_button_command(const XingzhiDebugCommand &command) {
         return;
     }
 
-    XingzhiActionResult result = xingzhi_actions_dispatch(&action_state, action, event);
+    XingzhiActionResult result = execute_action(action, event);
     draw_meter();
     send_action_result(action, event, result);
+}
+
+void handle_physical_button_event(const XingzhiButtonEvent &button_event) {
+    if (!button_event.active) {
+        return;
+    }
+
+    XingzhiActionEvent event = button_event.event;
+    if (button_event.action == XingzhiAction::CycleScreen) {
+        if (button_event.event == XingzhiActionEvent::Release) {
+            return;
+        }
+        event = XingzhiActionEvent::Click;
+    }
+
+    XingzhiActionResult result = execute_action(button_event.action, event);
+    draw_meter();
+    Serial.printf(
+        "Button action: ok=%d action=%s event=%s screen=%s count=%lu message=%s\n",
+        result.ok ? 1 : 0,
+        xingzhi_action_name(button_event.action),
+        xingzhi_event_name(event),
+        xingzhi_screen_name(action_state.current_screen),
+        static_cast<unsigned long>(action_state.action_count),
+        result.message && result.message[0] ? result.message : "-"
+    );
 }
 
 void handle_debug_line(const char *line) {
@@ -363,11 +447,19 @@ void poll_serial() {
     }
 }
 
+void poll_buttons() {
+    XingzhiButtonEvent event = {};
+    if (xingzhi_buttons_poll(&event, millis())) {
+        handle_physical_button_event(event);
+    }
+}
+
 void log_config() {
     Serial.println("Xingzhi parity firmware");
     Serial.printf("Panel: ST7789 %dx%d\n", DISPLAY_WIDTH, DISPLAY_HEIGHT);
     Serial.println("Payload: newline-delimited JSON on USB serial");
     Serial.println("Debug: XDBG STATUS, XDBG SCREENSHOT");
+    Serial.println("Buttons: GPIO0 cycle, GPIO40 Space, GPIO39 Shift+Tab");
 }
 
 }  // namespace
@@ -384,6 +476,7 @@ void setup() {
     usage.ok = false;
     usage.valid = false;
     xingzhi_actions_init(&action_state);
+    xingzhi_buttons_begin();
 
     Serial.println();
     log_config();
@@ -405,6 +498,7 @@ void loop() {
     static uint32_t last_log_ms = 0;
     poll_serial();
     poll_ble();
+    poll_buttons();
 
     const uint32_t now = millis();
     if (now - last_log_ms > 10000) {

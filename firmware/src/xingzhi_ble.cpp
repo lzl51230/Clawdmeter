@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <NimBLEDevice.h>
+#include <NimBLEHIDDevice.h>
 #include <string.h>
 
 namespace {
@@ -13,7 +14,36 @@ constexpr const char *TX_CHAR_UUID = "4c41555a-4465-7669-6365-000000000003";
 constexpr const char *REQ_CHAR_UUID = "4c41555a-4465-7669-6365-000000000004";
 constexpr size_t BLE_BUF_SIZE = 512;
 
+const uint8_t HID_REPORT_MAP[] = {
+    0x05, 0x01,  // Usage Page (Generic Desktop)
+    0x09, 0x06,  // Usage (Keyboard)
+    0xA1, 0x01,  // Collection (Application)
+    0x85, 0x01,  //   Report ID (1)
+    0x05, 0x07,  //   Usage Page (Key Codes)
+    0x19, 0xE0,  //   Usage Minimum (224)
+    0x29, 0xE7,  //   Usage Maximum (231)
+    0x15, 0x00,  //   Logical Minimum (0)
+    0x25, 0x01,  //   Logical Maximum (1)
+    0x75, 0x01,  //   Report Size (1)
+    0x95, 0x08,  //   Report Count (8)
+    0x81, 0x02,  //   Input (Data, Variable, Absolute)
+    0x95, 0x01,  //   Report Count (1)
+    0x75, 0x08,  //   Report Size (8)
+    0x81, 0x01,  //   Input (Constant)
+    0x95, 0x06,  //   Report Count (6)
+    0x75, 0x08,  //   Report Size (8)
+    0x15, 0x00,  //   Logical Minimum (0)
+    0x25, 0x65,  //   Logical Maximum (101)
+    0x05, 0x07,  //   Usage Page (Key Codes)
+    0x19, 0x00,  //   Usage Minimum (0)
+    0x29, 0x65,  //   Usage Maximum (101)
+    0x81, 0x00,  //   Input (Data, Array)
+    0xC0,        // End Collection
+};
+
 NimBLEServer *server = nullptr;
+NimBLEHIDDevice *hid_dev = nullptr;
+NimBLECharacteristic *input_kbd = nullptr;
 NimBLECharacteristic *tx_char = nullptr;
 NimBLECharacteristic *req_char = nullptr;
 XingzhiBleState state = XingzhiBleState::Init;
@@ -36,6 +66,7 @@ void start_advertising() {
     NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
     adv->reset();
     adv->addServiceUUID(SERVICE_UUID);
+    adv->setAppearance(HID_KEYBOARD);
     adv->enableScanResponse(true);
     adv->setName(DEVICE_NAME);
     const bool ok = adv->start();
@@ -113,6 +144,14 @@ void xingzhi_ble_init() {
     server = NimBLEDevice::createServer();
     static ServerCallbacks server_callbacks;
     server->setCallbacks(&server_callbacks);
+
+    hid_dev = new NimBLEHIDDevice(server);
+    hid_dev->setReportMap(const_cast<uint8_t *>(HID_REPORT_MAP), sizeof(HID_REPORT_MAP));
+    hid_dev->setManufacturer("Anthropic");
+    hid_dev->setPnp(0x02, 0x05AC, 0x820A, 0x0210);
+    hid_dev->setHidInfo(0x00, 0x02);
+    hid_dev->setBatteryLevel(100);
+    input_kbd = hid_dev->getInputReport(1);
 
     NimBLEService *service = server->createService(SERVICE_UUID);
     NimBLECharacteristic *rx_char = service->createCharacteristic(
@@ -217,4 +256,30 @@ void xingzhi_ble_request_refresh() {
         req_char->notify();
         Serial.println("Xingzhi BLE: refresh requested");
     }
+}
+
+bool xingzhi_ble_hid_available() {
+    return state == XingzhiBleState::Connected && input_kbd != nullptr;
+}
+
+bool xingzhi_ble_keyboard_press(uint8_t key, uint8_t modifier) {
+    if (!xingzhi_ble_hid_available()) {
+        copy_error("hid_unavailable");
+        return false;
+    }
+    uint8_t report[8] = {modifier, 0, key, 0, 0, 0, 0, 0};
+    input_kbd->setValue(report, sizeof(report));
+    input_kbd->notify();
+    return true;
+}
+
+bool xingzhi_ble_keyboard_release() {
+    if (!xingzhi_ble_hid_available()) {
+        copy_error("hid_unavailable");
+        return false;
+    }
+    uint8_t report[8] = {0};
+    input_kbd->setValue(report, sizeof(report));
+    input_kbd->notify();
+    return true;
 }

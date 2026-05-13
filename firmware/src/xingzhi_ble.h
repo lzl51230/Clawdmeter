@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdint.h>
+
 enum class XingzhiBleState {
     Init,
     Advertising,
@@ -22,3 +24,6 @@ const char *xingzhi_ble_take_error();
 void xingzhi_ble_send_ack();
 void xingzhi_ble_send_nack();
 void xingzhi_ble_request_refresh();
+bool xingzhi_ble_hid_available();
+bool xingzhi_ble_keyboard_press(uint8_t key, uint8_t modifier);
+bool xingzhi_ble_keyboard_release();

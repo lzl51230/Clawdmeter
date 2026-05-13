@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include "xingzhi_app_actions.h"
+#include "xingzhi_buttons.h"
 
 void test_cycle_click_advances_and_wraps_screens() {
     XingzhiActionState state = {};
@@ -81,6 +82,42 @@ void test_names_are_stable_for_debug_status() {
     TEST_ASSERT_EQUAL_STRING("release", xingzhi_event_name(XingzhiActionEvent::Release));
 }
 
+void test_hid_action_helper_identifies_keyboard_actions() {
+    TEST_ASSERT_TRUE(xingzhi_action_is_hid(XingzhiAction::HidSpace));
+    TEST_ASSERT_TRUE(xingzhi_action_is_hid(XingzhiAction::HidShiftTab));
+    TEST_ASSERT_FALSE(xingzhi_action_is_hid(XingzhiAction::CycleScreen));
+}
+
+void test_button_debounce_filters_bounce_until_stable() {
+    XingzhiButtonDebounce debounce = {};
+
+    XingzhiButtonEvent event = xingzhi_button_debounce_update(
+        &debounce,
+        XingzhiAction::CycleScreen,
+        false,
+        0,
+        35
+    );
+    TEST_ASSERT_FALSE(event.active);
+
+    event = xingzhi_button_debounce_update(&debounce, XingzhiAction::CycleScreen, true, 10, 35);
+    TEST_ASSERT_FALSE(event.active);
+    event = xingzhi_button_debounce_update(&debounce, XingzhiAction::CycleScreen, false, 15, 35);
+    TEST_ASSERT_FALSE(event.active);
+    event = xingzhi_button_debounce_update(&debounce, XingzhiAction::CycleScreen, true, 20, 35);
+    TEST_ASSERT_FALSE(event.active);
+
+    event = xingzhi_button_debounce_update(&debounce, XingzhiAction::CycleScreen, true, 54, 35);
+    TEST_ASSERT_FALSE(event.active);
+    event = xingzhi_button_debounce_update(&debounce, XingzhiAction::CycleScreen, true, 55, 35);
+    TEST_ASSERT_TRUE(event.active);
+    TEST_ASSERT_EQUAL(XingzhiAction::CycleScreen, event.action);
+    TEST_ASSERT_EQUAL(XingzhiActionEvent::Press, event.event);
+
+    event = xingzhi_button_debounce_update(&debounce, XingzhiAction::CycleScreen, true, 90, 35);
+    TEST_ASSERT_FALSE(event.active);
+}
+
 int main(int argc, char **argv) {
     UNITY_BEGIN();
     RUN_TEST(test_cycle_click_advances_and_wraps_screens);
@@ -88,5 +125,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_shift_tab_click_records_action_without_changing_screen);
     RUN_TEST(test_release_without_press_is_reported);
     RUN_TEST(test_names_are_stable_for_debug_status);
+    RUN_TEST(test_hid_action_helper_identifies_keyboard_actions);
+    RUN_TEST(test_button_debounce_filters_bounce_until_stable);
     return UNITY_END();
 }

@@ -11,6 +11,7 @@
 - 动作分发器：`cycle`、`space`、`shift_tab` 已可串口模拟，实体按键和 HID 后续复用。
 - BLE GATT 用量通路：广播名 `Claude Controller`，沿用原版 service/RX/TX/REQ UUID，BLE payload 与串口 fallback 走同一解析器。
 - Windows BLE 调试 CLI：`tools/windows_claude_usage_ble.py` 可发送真实 Claude 用量或固定测试 payload。
+- Xingzhi 三键输入：GPIO0 切屏，GPIO40 发送 Space，GPIO39 发送 Shift+Tab；HID 通过 BLE keyboard report 输出。
 
 ## 构建与刷写
 
@@ -34,6 +35,8 @@ U3 通过标准：连续执行两次 `button cycle` 后，`status` 分别报告 
 U4 通过标准：刷写后 `status` 报告 `ble=advertising`、空格安全的 `ble_name=Claude_Controller` 和 `ble_mac`；实际 BLE 广播名仍为 `Claude Controller`。status 屏截图显示 BLE 状态；串口 fallback 发送 `high` 后仍能更新 usage。
 
 U5 通过标准：Windows 侧安装 Bleak 后执行 `py -3 tools\windows_claude_usage_ble.py --test-preset high --require-ack`，工具报告 BLE write 和 TX ack 成功；随后串口 `status` 显示 `source=ble`、`payload=valid`、`detail=limited`，截图显示 high payload 的 88%/82% 读数。
+
+U6 通过标准：串口模拟 `cycle` 后状态切屏；模拟 `space`/`shift_tab` 时 `action` 和 `event` 被记录。未连接 BLE HID 时状态显示 `hid=unavailable` 和 `action_error=hid_unavailable`；BLE 客户端保持连接时状态显示 `hid=available`。实体按键需要人工按压验证，配对为键盘后 Space 与 Shift+Tab 应出现在当前焦点窗口。
 
 ## Windows BLE 用量发送
 

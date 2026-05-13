@@ -45,3 +45,4 @@ XingzhiActionResult xingzhi_actions_dispatch(
 const char *xingzhi_screen_name(XingzhiScreen screen);
 const char *xingzhi_action_name(XingzhiAction action);
 const char *xingzhi_event_name(XingzhiActionEvent event);
+bool xingzhi_action_is_hid(XingzhiAction action);

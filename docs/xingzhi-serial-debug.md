@@ -59,6 +59,8 @@ py -3 tools\xingzhi_debug.py button shift_tab --event click --port COM7
 
 连续执行 `button cycle --event click` 会在 `usage`、`status`、`splash` 三屏之间循环。每次切屏后都应先运行 `status` 并捕获截图，再继续下一段实现。
 
+HID 阶段后，`status` 还会包含 `hid=available|unavailable`。未连接 BLE HID 时，`space` 和 `shift_tab` 会记录动作但返回 `message=hid_unavailable`；这表示动作路径正常，键盘 report 因主机未连接而未发出。
+
 ## 用量 Fallback 验证
 
 BLE 尚未实现时，仍可通过串口发送测试 payload：
