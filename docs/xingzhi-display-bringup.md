@@ -102,4 +102,4 @@ py -3 -m esptool --chip esp32s3 --port COM7 --baud 460800 write-flash 0x0 firmwa
 
 ## 进入下一阶段条件
 
-只有在静态测试屏已点亮、边框完整、方向和颜色可判断后，才继续实现 USB 串口用量输入和 240x240 用量仪表。
+只有在静态测试屏已点亮、边框完整、方向和颜色可判断后，才继续实现 USB 串口用量输入。后续 BLE/HID/多屏能力必须进入独立的 `xingzhi_parity` 目标，不回写到本 bring-up 环境。

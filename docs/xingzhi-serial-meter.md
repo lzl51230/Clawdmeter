@@ -2,7 +2,7 @@
 
 本阶段在已验证的 `xingzhi-cube-1.54tft-wifi` ST7789 显示配置上运行 240x240 单屏用量仪表。数据来源是 USB 串口 newline-delimited JSON；仍不包含 BLE、HID、daemon、真实 Claude 轮询、触摸、PMU、IMU 或 splash。
 
-后续 parity 工作使用独立的 `xingzhi_parity` 环境，并在 `docs/xingzhi-serial-debug.md` 中记录截图回读和状态查询。`xingzhi_serial_meter` 继续作为最小串口 fallback，不承载 BLE/HID/UI 扩展。
+后续 parity 工作使用独立的 `xingzhi_parity` 环境，并在 `docs/xingzhi-serial-debug.md` 中记录截图回读、状态查询、BLE 写入和模拟按键。`xingzhi_serial_meter` 继续作为最小串口 fallback，不承载 BLE/HID/UI 扩展。
 
 ## 前置条件
 

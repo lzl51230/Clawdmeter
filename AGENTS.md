@@ -2,45 +2,46 @@
 
 ## Project Structure & Module Organization
 
-Clawdmeter is split into firmware, host tooling, and generated assets.
+本仓库由固件、主机工具和资源文件组成。
 
-- `firmware/` contains the PlatformIO ESP32-S3 project. Core application code lives in `firmware/src/`, with hardware setup in `display_cfg.h` and `main.cpp`, UI in `ui.cpp`, BLE in `ble.cpp`, and generated splash data in `splash_animations.h`.
-- `daemon/` contains the Linux user daemon and systemd unit that polls Claude usage and writes BLE GATT payloads.
-- `tools/` contains Node scripts for scraping/converting splash animations and PNG assets, plus Python host utilities such as `backup_xingzhi_flash.py` and `send_test_payload.py`.
-- `tools/tests/` contains Python unit tests for host utilities.
-- `assets/` stores source fonts, icons, demos, and logos; `screenshots/` stores reference UI captures.
-- `firmware/test/` contains PlatformIO native tests for portable parser and formatting helpers.
+- `firmware/` 是 PlatformIO ESP32-S3 工程；通用源码在 `firmware/src/`，原版 Waveshare 入口是 `main.cpp`，UI/BLE/PMU 分别在 `ui.cpp`、`ble.cpp`、`power.cpp`。
+- Xingzhi 相关源码使用 `xingzhi_*.cpp` 命名；`xingzhi_display_bringup` 只验证 ST7789，`xingzhi_serial_meter` 是最小 USB 串口 fallback，`xingzhi_parity` 承载串口调试、BLE GATT、HID、三屏 UI 和电源遥测。
+- `daemon/` 存放 Linux 用户级 BLE daemon；Windows Xingzhi 主机脚本在 `tools/windows_claude_usage_ble.py`。
+- `tools/` 存放备份、测试 payload、截图调试和资源转换工具；`tools/tests/` 是 Python 单元测试。
+- `firmware/test/` 是 PlatformIO native 测试；`assets/`、`screenshots/` 保存字体、图标、演示和参考截图。
 
 ## Build, Test, and Development Commands
 
-- `pio run -d firmware` builds the firmware.
-- `pio run -d firmware -e xingzhi_display_bringup` builds the isolated Xingzhi ST7789 test target.
-- `pio run -d firmware -e xingzhi_serial_meter` builds the isolated Xingzhi serial usage meter.
-- `pio test -d firmware -e native` runs portable firmware parser/format tests.
-- `pio run -d firmware -t upload --upload-port /dev/ttyACM0` flashes the board; adjust the port for your machine.
-- `python3 -m unittest discover -s tools/tests` runs host-tool tests.
-- `./flash.sh /dev/ttyACM0` wraps the upload command.
-- `./install.sh` installs and enables the user-level daemon service.
-- `systemctl --user start claude-usage-daemon` starts the daemon; use `journalctl --user -u claude-usage-daemon -f` for logs.
-- `./screenshot.sh out.png /dev/ttyACM0` captures the LVGL framebuffer from a flashed device.
-- `node tools/scrape_claudepix.js && node tools/convert_to_c.js` regenerates splash animation data.
+- `pio run -d firmware` 构建默认 Waveshare 目标。
+- `pio run -d firmware -e xingzhi_parity` 构建 Xingzhi parity 固件。
+- `pio run -d firmware -e xingzhi_serial_meter` 构建最小 USB 串口仪表。
+- `pio run -d firmware -e xingzhi_display_bringup` 构建 ST7789 显示验证目标。
+- `pio test -d firmware -e native` 运行固件 native 测试。
+- `python3 -m unittest discover -s tools/tests` 运行主机工具测试。
+- Windows 刷写示例：`py -3 -m esptool --chip esp32s3 --port COM7 --baud 460800 write-flash 0x0 firmware\.pio\build\xingzhi_parity\firmware.factory.bin`。
+- 串口调试示例：`py -3 tools\xingzhi_debug.py status|screenshot|button --port COM7`。
+- BLE 测试 payload：`py -3 tools\windows_claude_usage_ble.py --test-preset high --require-ack`。
 
 ## Coding Style & Naming Conventions
 
-Follow the existing C++ style: 4-space indentation, braces on the same line for functions and conditionals, `snake_case` for helper functions, and uppercase macros for hardware constants. Keep generated files clearly separated and do not hand-edit `firmware/src/splash_animations.h`. Shell scripts should remain POSIX-friendly Bash with `set -e` when failures must abort.
+沿用现有 C++ 风格：4 空格缩进，函数和条件的大括号同行，辅助函数用 `snake_case`，硬件常量用大写宏。Xingzhi 专用实现保持 `xingzhi_` 前缀，不把板级假设写入通用模块。不要手改 `firmware/src/splash_animations.h` 这类生成文件。
 
 ## Testing Guidelines
 
-At minimum, run the affected PlatformIO environment before submitting firmware changes. Run `pio test -d firmware -e native` when touching `usage_input` or meter formatting, and `python3 -m unittest discover -s tools/tests` when touching Python tools. For UI or display changes, flash the board and capture a screenshot or serial log; compare against `screenshots/` where applicable. For daemon changes, run the script through the systemd service and include relevant log lines.
+固件改动至少构建受影响的 PlatformIO 环境。修改 `usage_input`、`meter_format`、Xingzhi action/debug/power 时运行 `pio test -d firmware -e native`；修改 Python 工具时运行 `python3 -m unittest discover -s tools/tests`。显示或交互改动必须刷写实体设备，并记录串口 `status`、截图或模拟按键结果。
 
 ## Agent-Specific Instructions
 
-Keep `xingzhi_display_bringup` isolated with `build_src_filter`; it is a display-driver validation target only. Keep `xingzhi_serial_meter` isolated as the manual USB serial meter; do not add BLE, HID, touch, PMU, IMU, splash, daemon behavior, or real Claude polling to that environment until those features have their own plan.
+保持三个 Xingzhi 目标分工清晰：`xingzhi_display_bringup` 只做显示驱动验证；`xingzhi_serial_meter` 只保留手动 USB JSON fallback；`xingzhi_parity` 才添加串口截图、BLE GATT、HID、三屏 UI 和电源状态。每个实现段完成后，先用串口闸门验证再继续：`status`、`screenshot`、模拟 `button`、BLE 写入确认、HID 可用性或 fallback payload。Parity 工作不要改默认 Waveshare 目标，除非是共享解析/格式化代码且有回归测试。
 
 ## Commit & Pull Request Guidelines
 
-Use short, imperative commit messages matching the project history, for example `Update README to reflect changes in demo and animations` or `Add Bluetooth reset screen`. Pull requests should summarize the behavior change, list verification commands, mention the tested hardware/port, and include screenshots or serial logs for firmware-visible changes.
+提交信息使用简短祈使句或 Conventional Commit，例如 `feat(xingzhi): add serial debug target`。PR 需要说明行为变化、验证命令、测试硬件/端口；固件可见变化附串口日志或截图结论。
 
 ## Security & Configuration Tips
 
-Do not commit Claude credentials, BLE MAC caches, local systemd output, or machine-specific paths. The daemon reads `~/.claude/.credentials.json`; keep that file private and document any required local setup in the PR instead of encoding it in source.
+不要提交 Claude 凭据、BLE MAC 缓存、本机 systemd 输出、截图原始 dump 或机器专用路径。daemon 读取 `~/.claude/.credentials.json`，Windows BLE 工具也只应读取本机私有凭据；必要的本地设置写进文档或 PR 描述，不写入源码。
+
+# Global Instructions
+所有产出物必须用简体中文撰写。
+本仓库在 Codex 中默认使用 `Serena` 作为首选代码语义检索与编辑工具。

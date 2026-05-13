@@ -8,7 +8,7 @@
 - 串口调试：`tools/xingzhi_debug.py status|screenshot|button`。
 - 240x240 framebuffer 截图：RGB565LE framed binary，可转 `.bmp` 或 `.ppm`。
 - 三屏 UI：usage、status、splash，通过 `button cycle --event click` 切换。
-- 动作分发器：`cycle`、`space`、`shift_tab` 已可串口模拟，实体按键和 HID 后续复用。
+- 动作分发器：`cycle`、`space`、`shift_tab` 可由串口模拟、实体按键和 BLE HID 共用。
 - BLE GATT 用量通路：广播名 `Claude Controller`，沿用原版 service/RX/TX/REQ UUID，BLE payload 与串口 fallback 走同一解析器。
 - Windows BLE 调试 CLI：`tools/windows_claude_usage_ble.py` 可发送真实 Claude 用量或固定测试 payload。
 - Xingzhi 三键输入：GPIO0 切屏，GPIO40 发送 Space，GPIO39 发送 Shift+Tab；HID 通过 BLE keyboard report 输出。
@@ -30,6 +30,10 @@ py -3 tools\xingzhi_debug.py status --port COM7
 py -3 tools\xingzhi_debug.py screenshot --port COM7 --output status.bmp
 py -3 tools\xingzhi_debug.py button cycle --event click --port COM7
 ```
+
+U1 通过标准：`status` 返回 `target=xingzhi_parity`、`width=240`、`height=240`、`framebuffer=ready`，截图命令能回读 240x240 RGB565LE 图像；串口 JSON fallback 仍可接收测试 payload。
+
+U2 通过标准：`button cycle --event click` 能切屏，`button space` 和 `button shift_tab` 能记录动作、事件和计数，且不会改写最近的用量数据。
 
 U3 通过标准：连续执行两次 `button cycle` 后，`status` 分别报告 `screen=status` 和 `screen=splash`；每个屏幕都能截图回读为 240x240 图像。
 
@@ -55,7 +59,7 @@ py -3 tools\windows_claude_usage_ble.py --watch
 ## UI 屏幕
 
 - `usage`：保留已验证的 session、weekly、reset、payload 状态和 high/error 颜色。
-- `status`：显示 BLE 状态、最近数据来源、payload 细节、最后动作和恢复提示。BLE 尚未实现时显示 pending/disabled。
+- `status`：显示 BLE/HID 状态、最近数据来源、payload 细节、最后动作、电源读数和恢复提示。
 - `splash`：提供 Clawdmeter/Xingzhi 识别和占位图形，不包含完整动画。
 
 ## 注意事项

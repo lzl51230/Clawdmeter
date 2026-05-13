@@ -58,13 +58,20 @@ class FakeSerial:
 class XingzhiDebugToolTest(unittest.TestCase):
     def test_parse_status_line_extracts_key_values(self):
         status = xingzhi_debug.parse_status_line(
-            "boot log\nXDBG STATUS target=xingzhi_parity screen=usage width=240 height=240 source=serial"
+            "boot log\n"
+            "XDBG STATUS target=xingzhi_parity screen=usage width=240 height=240 "
+            "source=ble ble=advertising ble_name=Claude_Controller hid=unavailable "
+            "power=valid battery=100 charging=1 adc=2448/2451 samples=3"
         )
 
         self.assertEqual(status["target"], "xingzhi_parity")
         self.assertEqual(status["screen"], "usage")
         self.assertEqual(status["width"], "240")
-        self.assertEqual(status["source"], "serial")
+        self.assertEqual(status["source"], "ble")
+        self.assertEqual(status["ble_name"], "Claude_Controller")
+        self.assertEqual(status["hid"], "unavailable")
+        self.assertEqual(status["power"], "valid")
+        self.assertEqual(status["battery"], "100")
 
     def test_parse_screenshot_start_reads_frame_metadata(self):
         metadata = xingzhi_debug.parse_screenshot_start(
