@@ -9,6 +9,7 @@
 - 240x240 framebuffer 截图：RGB565LE framed binary，可转 `.bmp` 或 `.ppm`。
 - 三屏 UI：usage、status、splash，通过 `button cycle --event click` 切换。
 - 动作分发器：`cycle`、`space`、`shift_tab` 已可串口模拟，实体按键和 HID 后续复用。
+- BLE GATT 用量通路：广播名 `Claude Controller`，沿用原版 service/RX/TX/REQ UUID，BLE payload 与串口 fallback 走同一解析器。
 
 ## 构建与刷写
 
@@ -28,6 +29,8 @@ py -3 tools\xingzhi_debug.py button cycle --event click --port COM7
 ```
 
 U3 通过标准：连续执行两次 `button cycle` 后，`status` 分别报告 `screen=status` 和 `screen=splash`；每个屏幕都能截图回读为 240x240 图像。
+
+U4 通过标准：刷写后 `status` 报告 `ble=advertising`、空格安全的 `ble_name=Claude_Controller` 和 `ble_mac`；实际 BLE 广播名仍为 `Claude Controller`。status 屏截图显示 BLE 状态；串口 fallback 发送 `high` 后仍能更新 usage。
 
 ## UI 屏幕
 

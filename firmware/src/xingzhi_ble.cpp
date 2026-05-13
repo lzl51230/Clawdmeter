@@ -1,0 +1,220 @@
+#include "xingzhi_ble.h"
+
+#include <Arduino.h>
+#include <NimBLEDevice.h>
+#include <string.h>
+
+namespace {
+
+constexpr const char *DEVICE_NAME = "Claude Controller";
+constexpr const char *SERVICE_UUID = "4c41555a-4465-7669-6365-000000000001";
+constexpr const char *RX_CHAR_UUID = "4c41555a-4465-7669-6365-000000000002";
+constexpr const char *TX_CHAR_UUID = "4c41555a-4465-7669-6365-000000000003";
+constexpr const char *REQ_CHAR_UUID = "4c41555a-4465-7669-6365-000000000004";
+constexpr size_t BLE_BUF_SIZE = 512;
+
+NimBLEServer *server = nullptr;
+NimBLECharacteristic *tx_char = nullptr;
+NimBLECharacteristic *req_char = nullptr;
+XingzhiBleState state = XingzhiBleState::Init;
+bool need_advertise = false;
+char rx_buf[BLE_BUF_SIZE] = {};
+char last_error[72] = {};
+char pending_error[72] = {};
+char mac_str[18] = {};
+volatile bool data_ready = false;
+volatile bool error_ready = false;
+volatile bool has_received_data = false;
+
+void copy_error(const char *message) {
+    snprintf(last_error, sizeof(last_error), "%s", message ? message : "");
+    snprintf(pending_error, sizeof(pending_error), "%s", message ? message : "");
+    error_ready = pending_error[0] != '\0';
+}
+
+void start_advertising() {
+    NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
+    adv->reset();
+    adv->addServiceUUID(SERVICE_UUID);
+    adv->enableScanResponse(true);
+    adv->setName(DEVICE_NAME);
+    const bool ok = adv->start();
+    if (ok) {
+        state = XingzhiBleState::Advertising;
+        snprintf(last_error, sizeof(last_error), "");
+    } else {
+        state = XingzhiBleState::Error;
+        copy_error("advertising_start_failed");
+    }
+    Serial.printf("Xingzhi BLE: advertising start=%s\n", ok ? "OK" : "FAILED");
+}
+
+class ServerCallbacks : public NimBLEServerCallbacks {
+    void onConnect(NimBLEServer *s, NimBLEConnInfo &info) override {
+        state = XingzhiBleState::Connected;
+        snprintf(last_error, sizeof(last_error), "");
+        Serial.printf("Xingzhi BLE: connected from %s\n", info.getAddress().toString().c_str());
+    }
+
+    void onDisconnect(NimBLEServer *s, NimBLEConnInfo &info, int reason) override {
+        state = XingzhiBleState::Disconnected;
+        need_advertise = true;
+        snprintf(last_error, sizeof(last_error), "disconnect_%d", reason);
+        Serial.printf("Xingzhi BLE: disconnected reason=%d\n", reason);
+    }
+};
+
+class RxCallbacks : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic *chr, NimBLEConnInfo &info) override {
+        std::string value = chr->getValue();
+        const size_t length = value.length();
+        if (length >= BLE_BUF_SIZE) {
+            copy_error("payload_too_large");
+            Serial.printf("Xingzhi BLE: rejected oversized payload len=%lu\n", static_cast<unsigned long>(length));
+            return;
+        }
+
+        memcpy(rx_buf, value.c_str(), length);
+        rx_buf[length] = '\0';
+        data_ready = true;
+        has_received_data = true;
+    }
+};
+
+class ReqCallbacks : public NimBLECharacteristicCallbacks {
+    void onSubscribe(NimBLECharacteristic *chr, NimBLEConnInfo &info, uint16_t subValue) override {
+        Serial.printf(
+            "Xingzhi BLE: req subscribe=%u has_data=%d\n",
+            subValue,
+            has_received_data ? 1 : 0
+        );
+        if (subValue != 0 && !has_received_data) {
+            xingzhi_ble_request_refresh();
+        }
+    }
+};
+
+}  // namespace
+
+void xingzhi_ble_init() {
+    state = XingzhiBleState::Init;
+    snprintf(last_error, sizeof(last_error), "");
+    NimBLEDevice::init(DEVICE_NAME);
+    NimBLEDevice::setSecurityAuth(true, false, true);
+
+    NimBLEAddress addr = NimBLEDevice::getAddress();
+    snprintf(mac_str, sizeof(mac_str), "%s", addr.toString().c_str());
+    for (int index = 0; mac_str[index]; ++index) {
+        if (mac_str[index] >= 'a' && mac_str[index] <= 'f') {
+            mac_str[index] -= 32;
+        }
+    }
+
+    server = NimBLEDevice::createServer();
+    static ServerCallbacks server_callbacks;
+    server->setCallbacks(&server_callbacks);
+
+    NimBLEService *service = server->createService(SERVICE_UUID);
+    NimBLECharacteristic *rx_char = service->createCharacteristic(
+        RX_CHAR_UUID,
+        NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
+    );
+    static RxCallbacks rx_callbacks;
+    rx_char->setCallbacks(&rx_callbacks);
+
+    tx_char = service->createCharacteristic(
+        TX_CHAR_UUID,
+        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
+    );
+
+    req_char = service->createCharacteristic(
+        REQ_CHAR_UUID,
+        NIMBLE_PROPERTY::NOTIFY
+    );
+    static ReqCallbacks req_callbacks;
+    req_char->setCallbacks(&req_callbacks);
+
+    server->start();
+    start_advertising();
+    Serial.printf("Xingzhi BLE: init complete, MAC=%s\n", mac_str);
+}
+
+void xingzhi_ble_tick() {
+    if (need_advertise) {
+        need_advertise = false;
+        start_advertising();
+    }
+}
+
+XingzhiBleState xingzhi_ble_state() {
+    return state;
+}
+
+const char *xingzhi_ble_state_name() {
+    switch (state) {
+    case XingzhiBleState::Advertising:
+        return "advertising";
+    case XingzhiBleState::Connected:
+        return "connected";
+    case XingzhiBleState::Disconnected:
+        return "disconnected";
+    case XingzhiBleState::Error:
+        return "error";
+    case XingzhiBleState::Init:
+    default:
+        return "init";
+    }
+}
+
+const char *xingzhi_ble_device_name() {
+    return DEVICE_NAME;
+}
+
+const char *xingzhi_ble_mac() {
+    return mac_str[0] ? mac_str : "-";
+}
+
+const char *xingzhi_ble_last_error() {
+    return last_error;
+}
+
+bool xingzhi_ble_has_payload() {
+    return data_ready;
+}
+
+const char *xingzhi_ble_take_payload() {
+    data_ready = false;
+    return rx_buf;
+}
+
+bool xingzhi_ble_has_error() {
+    return error_ready;
+}
+
+const char *xingzhi_ble_take_error() {
+    error_ready = false;
+    return pending_error;
+}
+
+void xingzhi_ble_send_ack() {
+    if (state == XingzhiBleState::Connected && tx_char) {
+        tx_char->setValue("{\"ack\":true}");
+        tx_char->notify();
+    }
+}
+
+void xingzhi_ble_send_nack() {
+    if (state == XingzhiBleState::Connected && tx_char) {
+        tx_char->setValue("{\"err\":true}");
+        tx_char->notify();
+    }
+}
+
+void xingzhi_ble_request_refresh() {
+    if (state == XingzhiBleState::Connected && req_char) {
+        uint8_t value = 0x01;
+        req_char->setValue(&value, 1);
+        req_char->notify();
+        Serial.println("Xingzhi BLE: refresh requested");
+    }
+}

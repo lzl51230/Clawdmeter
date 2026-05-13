@@ -26,6 +26,8 @@ struct XingzhiDebugStatus {
     const char *payload = "";
     const char *source = "";
     const char *ble = "";
+    const char *ble_name = "";
+    const char *ble_mac = "";
     uint32_t uptime_ms = 0;
     const char *framebuffer = "";
     const char *detail = "";

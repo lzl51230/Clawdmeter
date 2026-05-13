@@ -40,11 +40,12 @@ void test_status_line_is_bounded_and_parseable() {
     status.payload = "valid";
     status.source = "serial";
     status.ble = "disabled";
+    status.ble_name = "Claude Controller";
     status.uptime_ms = 1234;
     status.framebuffer = "ready";
     status.detail = "allowed";
 
-    char line[256];
+    char line[384];
     int written = xingzhi_debug_format_status(&status, line, sizeof(line));
 
     TEST_ASSERT_GREATER_THAN(0, written);
@@ -55,6 +56,7 @@ void test_status_line_is_bounded_and_parseable() {
     TEST_ASSERT_NOT_NULL(strstr(line, "width=240"));
     TEST_ASSERT_NOT_NULL(strstr(line, "height=240"));
     TEST_ASSERT_NOT_NULL(strstr(line, "source=serial"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "ble_name=Claude_Controller"));
 }
 
 void test_screenshot_start_line_contains_frame_metadata() {

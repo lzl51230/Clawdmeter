@@ -99,13 +99,15 @@ int xingzhi_debug_format_status(const XingzhiDebugStatus *status, char *buf, siz
     }
 
     char detail[40];
+    char ble_name[40];
     char action_error[40];
     sanitize_value(status->detail, detail, sizeof(detail));
+    sanitize_value(status->ble_name, ble_name, sizeof(ble_name));
     sanitize_value(status->action_error, action_error, sizeof(action_error));
     return snprintf(
         buf,
         len,
-        "XDBG STATUS target=%s screen=%s width=%d height=%d payload=%s source=%s ble=%s uptime_ms=%lu framebuffer=%s detail=%s action=%s event=%s action_count=%lu action_error=%s",
+        "XDBG STATUS target=%s screen=%s width=%d height=%d payload=%s source=%s ble=%s ble_name=%s ble_mac=%s uptime_ms=%lu framebuffer=%s detail=%s action=%s event=%s action_count=%lu action_error=%s",
         safe_value(status->target),
         safe_value(status->screen),
         status->width,
@@ -113,6 +115,8 @@ int xingzhi_debug_format_status(const XingzhiDebugStatus *status, char *buf, siz
         safe_value(status->payload),
         safe_value(status->source),
         safe_value(status->ble),
+        ble_name,
+        safe_value(status->ble_mac),
         static_cast<unsigned long>(status->uptime_ms),
         safe_value(status->framebuffer),
         detail,

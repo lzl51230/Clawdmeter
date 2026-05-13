@@ -4,6 +4,7 @@
 
 #include "usage_input.h"
 #include "xingzhi_app_actions.h"
+#include "xingzhi_ble.h"
 #include "xingzhi_debug_serial.h"
 #include "xingzhi_display_cfg.h"
 #include "xingzhi_meter_ui.h"
@@ -51,6 +52,7 @@ MeterPayloadState payload_state = MeterPayloadState::NoData;
 char payload_detail[40] = {};
 const char *last_payload_source = "none";
 XingzhiActionState action_state = {};
+char last_ble_detail[40] = {};
 bool display_ready = false;
 
 void set_backlight(bool on) {
@@ -91,9 +93,9 @@ void draw_meter() {
     state.payload_state = payload_state;
     state.detail = payload_detail;
     state.last_source = last_payload_source;
-    state.ble_state = "disabled";
-    state.ble_detail = "BLE stage pending";
-    state.last_error = action_state.last_error;
+    state.ble_state = xingzhi_ble_state_name();
+    state.ble_detail = last_ble_detail[0] ? last_ble_detail : xingzhi_ble_mac();
+    state.last_error = action_state.last_error[0] ? action_state.last_error : xingzhi_ble_last_error();
     state.last_action = xingzhi_action_name(action_state.last_action);
     state.action_count = action_state.action_count;
     xingzhi_meter_ui_draw_screen(&canvas, &state);
@@ -101,7 +103,7 @@ void draw_meter() {
 }
 
 void send_status() {
-    char line[320];
+    char line[384];
     XingzhiDebugStatus status = {};
     status.target = "xingzhi_parity";
     status.screen = xingzhi_screen_name(action_state.current_screen);
@@ -109,14 +111,16 @@ void send_status() {
     status.height = DISPLAY_HEIGHT;
     status.payload = payload_state_name();
     status.source = last_payload_source;
-    status.ble = "disabled";
+    status.ble = xingzhi_ble_state_name();
+    status.ble_name = xingzhi_ble_device_name();
+    status.ble_mac = xingzhi_ble_mac();
     status.uptime_ms = millis();
     status.framebuffer = framebuffer_state_name();
     status.detail = payload_detail;
     status.action = xingzhi_action_name(action_state.last_action);
     status.event = xingzhi_event_name(action_state.last_event);
     status.action_count = action_state.action_count;
-    status.action_error = action_state.last_error;
+    status.action_error = action_state.last_error[0] ? action_state.last_error : xingzhi_ble_last_error();
     xingzhi_debug_format_status(&status, line, sizeof(line));
     Serial.println(line);
 }
@@ -196,6 +200,62 @@ void handle_payload_line(const char *line) {
     }
 
     draw_meter();
+}
+
+void handle_ble_payload_line(const char *line) {
+    UsageData parsed = {};
+    UsageParseResult result = parse_usage_payload(line, &parsed);
+
+    switch (result) {
+    case UsageParseResult::Valid:
+        usage = parsed;
+        payload_state = MeterPayloadState::Valid;
+        last_payload_source = "ble";
+        set_detail(parsed.status);
+        snprintf(last_ble_detail, sizeof(last_ble_detail), "rx ok");
+        xingzhi_ble_send_ack();
+        Serial.printf(
+            "BLE usage update: session=%.1f weekly=%.1f status=%s\n",
+            usage.session_pct,
+            usage.weekly_pct,
+            usage.status
+        );
+        break;
+    case UsageParseResult::ErrorPayload:
+        payload_state = MeterPayloadState::Invalid;
+        last_payload_source = "ble";
+        set_detail(parsed.status);
+        snprintf(last_ble_detail, sizeof(last_ble_detail), "rx error");
+        xingzhi_ble_send_nack();
+        Serial.printf("BLE usage error payload: status=%s\n", parsed.status);
+        break;
+    case UsageParseResult::InvalidJson:
+        payload_state = MeterPayloadState::Invalid;
+        last_payload_source = "ble";
+        set_detail("malformed BLE JSON");
+        snprintf(last_ble_detail, sizeof(last_ble_detail), "rx invalid");
+        xingzhi_ble_send_nack();
+        Serial.println("BLE usage payload invalid JSON");
+        break;
+    case UsageParseResult::Empty:
+    default:
+        return;
+    }
+
+    draw_meter();
+}
+
+void poll_ble() {
+    xingzhi_ble_tick();
+    if (xingzhi_ble_has_error()) {
+        const char *error = xingzhi_ble_take_error();
+        snprintf(last_ble_detail, sizeof(last_ble_detail), "%s", error ? error : "ble error");
+        xingzhi_ble_send_nack();
+        draw_meter();
+    }
+    if (xingzhi_ble_has_payload()) {
+        handle_ble_payload_line(xingzhi_ble_take_payload());
+    }
 }
 
 bool parse_action(const char *token, XingzhiAction *action) {
@@ -327,6 +387,7 @@ void setup() {
 
     Serial.println();
     log_config();
+    xingzhi_ble_init();
 
     display_ready = canvas.begin(DISPLAY_SPI_FREQUENCY);
     if (!display_ready) {
@@ -343,6 +404,7 @@ void setup() {
 void loop() {
     static uint32_t last_log_ms = 0;
     poll_serial();
+    poll_ble();
 
     const uint32_t now = millis();
     if (now - last_log_ms > 10000) {
