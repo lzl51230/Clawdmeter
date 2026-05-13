@@ -29,6 +29,18 @@ While the splash is up, the middle button cycles animations instead of screens. 
 - USB-C cable for flashing firmware and charging
 - 3.7V Li-Po battery (MX1.25 2-pin connector, optional)
 
+## Xingzhi display bring-up
+
+The fork includes an isolated first-stage target for `xingzhi-cube-1.54tft-wifi`.
+It backs up the current Xiaozhi firmware, then builds a minimal 240×240 ST7789
+test screen without BLE, LVGL UI, touch, PMU, IMU, splash, or usage-meter logic.
+See [docs/xingzhi-display-bringup.md](docs/xingzhi-display-bringup.md).
+
+```bash
+python3 tools/backup_xingzhi_flash.py --port COM7 --dry-run
+pio run -d firmware -e xingzhi_display_bringup
+```
+
 ## Prerequisites
 
 - Linux (tested on Ubuntu)

@@ -1,12 +1,15 @@
 # PlatformIO build artifacts
 firmware/.pio/
 firmware/.vscode/
+backups/
+__pycache__/
 
 # OS
 .DS_Store
 
 # Claude Code
 .claude/
+.serena/
 
 # Node tooling deps (npm install --no-save)
 tools/node_modules/
