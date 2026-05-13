@@ -29,6 +29,11 @@ struct XingzhiDebugStatus {
     const char *ble_name = "";
     const char *ble_mac = "";
     const char *hid = "";
+    const char *power = "";
+    const char *battery = "";
+    const char *charging = "";
+    const char *adc = "";
+    const char *samples = "";
     uint32_t uptime_ms = 0;
     const char *framebuffer = "";
     const char *detail = "";

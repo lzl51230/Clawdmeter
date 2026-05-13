@@ -19,6 +19,10 @@ struct XingzhiUiState {
     const char *last_error = "";
     const char *last_action = "none";
     uint32_t action_count = 0;
+    bool power_valid = false;
+    int battery_level = -1;
+    bool charging = false;
+    const char *power_detail = "unknown";
 };
 
 void xingzhi_meter_ui_draw(

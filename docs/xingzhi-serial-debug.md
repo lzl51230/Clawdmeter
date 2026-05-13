@@ -26,6 +26,7 @@ py -3 tools\xingzhi_debug.py status --port COM7
 
 固件返回一行 `XDBG STATUS`，包含 `target=xingzhi_parity`、`screen=usage`、`width=240`、`height=240`、`payload`、`source`、`ble=disabled`、`uptime_ms` 和 `framebuffer`。
 BLE 阶段后，同一状态行还会包含 `ble=advertising|connected|disconnected|error`、`ble_name` 和 `ble_mac`。状态行字段按空格分隔，因此 `ble_name` 会将空格转为下划线，例如实际广播名 `Claude Controller` 会显示为 `Claude_Controller`。
+电源遥测阶段后，状态行还会包含 `power=valid|sampling|unavailable|error`、`battery`、`charging`、`adc=<avg>/<raw>` 和 `samples`。只有 `power=valid` 时，status 屏才会显示具体电量。
 
 ## 截图回读
 

@@ -171,13 +171,21 @@ void draw_status_screen(Arduino_GFX *display, const XingzhiUiState *state) {
     snprintf(count_buf, sizeof(count_buf), "%lu", static_cast<unsigned long>(state ? state->action_count : 0));
     draw_key_value(display, 156, "count", count_buf, COLOR_TEXT);
 
-    display->drawFastHLine(16, 184, 208, COLOR_PANEL);
-    if (has_error) {
-        draw_clipped_text(display, 18, 198, state->last_error, COLOR_RED, 26);
-        draw_text(display, 18, 216, "Use serial fallback", COLOR_DIM);
+    char power_buf[24];
+    if (state && state->power_valid) {
+        snprintf(power_buf, sizeof(power_buf), "%d%% %s", state->battery_level, state->charging ? "charging" : "battery");
     } else {
-        draw_clipped_text(display, 18, 198, state && state->ble_detail ? state->ble_detail : "BLE not enabled yet", COLOR_DIM, 26);
-        draw_text(display, 18, 216, "Pair after BLE stage", COLOR_DIM);
+        snprintf(power_buf, sizeof(power_buf), "%s", state && state->power_detail ? state->power_detail : "unknown");
+    }
+    draw_key_value(display, 176, "battery", power_buf, state && state->power_valid ? COLOR_TEXT : COLOR_DIM);
+
+    display->drawFastHLine(16, 196, 208, COLOR_PANEL);
+    if (has_error) {
+        draw_clipped_text(display, 18, 207, state->last_error, COLOR_RED, 26);
+        draw_text(display, 18, 224, "Use serial fallback", COLOR_DIM);
+    } else {
+        draw_clipped_text(display, 18, 207, state && state->ble_detail ? state->ble_detail : "BLE not enabled yet", COLOR_DIM, 26);
+        draw_text(display, 18, 224, "Pair after BLE stage", COLOR_DIM);
     }
 }
 

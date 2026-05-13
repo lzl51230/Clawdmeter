@@ -9,6 +9,7 @@
 #include "xingzhi_debug_serial.h"
 #include "xingzhi_display_cfg.h"
 #include "xingzhi_meter_ui.h"
+#include "xingzhi_power.h"
 
 using namespace xingzhi_display;
 
@@ -54,6 +55,10 @@ char payload_detail[40] = {};
 const char *last_payload_source = "none";
 XingzhiActionState action_state = {};
 char last_ble_detail[40] = {};
+const char *last_power_state = "";
+int last_power_level = -2;
+uint8_t last_power_samples = 255;
+bool last_power_charging = false;
 bool display_ready = false;
 
 constexpr uint8_t HID_KEY_SPACE = 0x2C;
@@ -103,12 +108,36 @@ void draw_meter() {
     state.last_error = action_state.last_error[0] ? action_state.last_error : xingzhi_ble_last_error();
     state.last_action = xingzhi_action_name(action_state.last_action);
     state.action_count = action_state.action_count;
+    XingzhiPowerStatus power = xingzhi_power_status();
+    state.power_valid = power.valid;
+    state.battery_level = power.level;
+    state.charging = power.charging;
+    state.power_detail = power.state;
     xingzhi_meter_ui_draw_screen(&canvas, &state);
     canvas.flush();
 }
 
 void send_status() {
-    char line[448];
+    char line[560];
+    char battery[8];
+    char charging[4];
+    char adc[20];
+    char samples[8];
+    XingzhiPowerStatus power = xingzhi_power_status();
+    if (power.valid) {
+        snprintf(battery, sizeof(battery), "%d", power.level);
+        snprintf(charging, sizeof(charging), "%d", power.charging ? 1 : 0);
+    } else {
+        snprintf(battery, sizeof(battery), "-");
+        snprintf(charging, sizeof(charging), "-");
+    }
+    if (power.average_adc >= 0 || power.raw_adc >= 0) {
+        snprintf(adc, sizeof(adc), "%d/%d", power.average_adc, power.raw_adc);
+    } else {
+        snprintf(adc, sizeof(adc), "-");
+    }
+    snprintf(samples, sizeof(samples), "%u", static_cast<unsigned int>(power.sample_count));
+
     XingzhiDebugStatus status = {};
     status.target = "xingzhi_parity";
     status.screen = xingzhi_screen_name(action_state.current_screen);
@@ -120,6 +149,11 @@ void send_status() {
     status.ble_name = xingzhi_ble_device_name();
     status.ble_mac = xingzhi_ble_mac();
     status.hid = xingzhi_ble_hid_available() ? "available" : "unavailable";
+    status.power = power.state;
+    status.battery = battery;
+    status.charging = charging;
+    status.adc = adc;
+    status.samples = samples;
     status.uptime_ms = millis();
     status.framebuffer = framebuffer_state_name();
     status.detail = payload_detail;
@@ -454,6 +488,23 @@ void poll_buttons() {
     }
 }
 
+void poll_power(uint32_t now_ms) {
+    xingzhi_power_tick(now_ms);
+    XingzhiPowerStatus power = xingzhi_power_status();
+    if (
+        strcmp(power.state, last_power_state) != 0 ||
+        power.level != last_power_level ||
+        power.sample_count != last_power_samples ||
+        power.charging != last_power_charging
+    ) {
+        last_power_state = power.state;
+        last_power_level = power.level;
+        last_power_samples = power.sample_count;
+        last_power_charging = power.charging;
+        draw_meter();
+    }
+}
+
 void log_config() {
     Serial.println("Xingzhi parity firmware");
     Serial.printf("Panel: ST7789 %dx%d\n", DISPLAY_WIDTH, DISPLAY_HEIGHT);
@@ -477,6 +528,7 @@ void setup() {
     usage.valid = false;
     xingzhi_actions_init(&action_state);
     xingzhi_buttons_begin();
+    xingzhi_power_init();
 
     Serial.println();
     log_config();
@@ -501,6 +553,7 @@ void loop() {
     poll_buttons();
 
     const uint32_t now = millis();
+    poll_power(now);
     if (now - last_log_ms > 10000) {
         last_log_ms = now;
         Serial.println("Xingzhi parity alive.");

@@ -42,11 +42,16 @@ void test_status_line_is_bounded_and_parseable() {
     status.ble = "disabled";
     status.ble_name = "Claude Controller";
     status.hid = "unavailable";
+    status.power = "valid";
+    status.battery = "80";
+    status.charging = "1";
+    status.adc = "2338";
+    status.samples = "3";
     status.uptime_ms = 1234;
     status.framebuffer = "ready";
     status.detail = "allowed";
 
-    char line[448];
+    char line[560];
     int written = xingzhi_debug_format_status(&status, line, sizeof(line));
 
     TEST_ASSERT_GREATER_THAN(0, written);
@@ -59,6 +64,8 @@ void test_status_line_is_bounded_and_parseable() {
     TEST_ASSERT_NOT_NULL(strstr(line, "source=serial"));
     TEST_ASSERT_NOT_NULL(strstr(line, "ble_name=Claude_Controller"));
     TEST_ASSERT_NOT_NULL(strstr(line, "hid=unavailable"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "power=valid"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "battery=80"));
 }
 
 void test_screenshot_start_line_contains_frame_metadata() {
