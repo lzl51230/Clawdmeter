@@ -213,7 +213,7 @@ def build_parser() -> argparse.ArgumentParser:
     screenshot = subcommands.add_parser("screenshot", help="Capture the 240x240 RGB565 framebuffer")
     screenshot.add_argument("--port", default=DEFAULT_PORT, help="Serial port, for example COM7")
     screenshot.add_argument("--baud", type=int, default=DEFAULT_BAUD, help="Serial baud rate")
-    screenshot.add_argument("--timeout", type=float, default=5.0, help="Serial read timeout in seconds")
+    screenshot.add_argument("--timeout", type=float, default=12.0, help="Serial read timeout in seconds")
     screenshot.add_argument("--settle-delay", type=float, default=0.4, help="Delay after opening the port")
     screenshot.add_argument("--output", type=Path, default=Path("xingzhi-screenshot.bmp"), help="Output .bmp or .ppm path")
     screenshot.add_argument("--raw-output", type=Path, help="Optional raw RGB565 output path")

@@ -41,6 +41,7 @@ XDBG SCREENSHOT_END
 ```
 
 主机工具会忽略 start marker 前的启动日志，并把 RGB565LE framebuffer 转为 `.bmp` 或 `.ppm`。
+默认截图读取超时为 12 秒；如果串口环境不稳定，可继续用 `--timeout 20` 放宽。
 
 ## 模拟按键
 
@@ -54,6 +55,8 @@ py -3 tools\xingzhi_debug.py button shift_tab --event click --port COM7
 ```
 
 返回 `XDBG ACTION` 字段，包含 `ok`、`action`、`event`、`screen`、`count` 和 `message`。随后运行 `status` 可确认 `screen`、`action`、`event` 与 `action_count`。
+
+连续执行 `button cycle --event click` 会在 `usage`、`status`、`splash` 三屏之间循环。每次切屏后都应先运行 `status` 并捕获截图，再继续下一段实现。
 
 ## 用量 Fallback 验证
 

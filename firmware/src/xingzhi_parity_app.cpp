@@ -85,27 +85,18 @@ void draw_meter() {
     if (!display_ready || !canvas.getFramebuffer()) {
         return;
     }
-    if (action_state.current_screen == XingzhiScreen::Usage) {
-        xingzhi_meter_ui_draw(&canvas, &usage, payload_state, payload_detail);
-    } else {
-        canvas.fillScreen(0x0000);
-        canvas.drawRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, 0x3D9F);
-        canvas.drawRect(2, 2, DISPLAY_WIDTH - 4, DISPLAY_HEIGHT - 4, 0x18E3);
-        canvas.setTextColor(0xFFFF);
-        canvas.setTextSize(2);
-        canvas.setCursor(18, 20);
-        canvas.print("Clawdmeter");
-        canvas.setTextSize(3);
-        canvas.setCursor(18, 78);
-        canvas.print(xingzhi_screen_name(action_state.current_screen));
-        canvas.setTextSize(1);
-        canvas.setTextColor(0x9CF3);
-        canvas.setCursor(18, 136);
-        canvas.print("U2 simulated screen");
-        canvas.setCursor(18, 158);
-        canvas.print("action=");
-        canvas.print(xingzhi_action_name(action_state.last_action));
-    }
+    XingzhiUiState state = {};
+    state.screen = action_state.current_screen;
+    state.data = &usage;
+    state.payload_state = payload_state;
+    state.detail = payload_detail;
+    state.last_source = last_payload_source;
+    state.ble_state = "disabled";
+    state.ble_detail = "BLE stage pending";
+    state.last_error = action_state.last_error;
+    state.last_action = xingzhi_action_name(action_state.last_action);
+    state.action_count = action_state.action_count;
+    xingzhi_meter_ui_draw_screen(&canvas, &state);
     canvas.flush();
 }
 

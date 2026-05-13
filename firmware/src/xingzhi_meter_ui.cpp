@@ -53,6 +53,20 @@ void draw_text(Arduino_GFX *display, int16_t x, int16_t y, const char *text, uin
     display->print(text);
 }
 
+void draw_clipped_text(
+    Arduino_GFX *display,
+    int16_t x,
+    int16_t y,
+    const char *text,
+    uint16_t color,
+    size_t max_chars,
+    uint8_t size = 1
+) {
+    char clipped[36];
+    snprintf(clipped, sizeof(clipped), "%.*s", static_cast<int>(max_chars), text ? text : "-");
+    draw_text(display, x, y, clipped, color, size);
+}
+
 void draw_bar(Arduino_GFX *display, int16_t x, int16_t y, int16_t w, int16_t h, float pct, bool valid, uint16_t color) {
     display->drawRect(x, y, w, h, COLOR_DIM);
     display->fillRect(x + 1, y + 1, w - 2, h - 2, COLOR_BAR_BG);
@@ -84,9 +98,30 @@ void draw_usage_row(
     draw_bar(display, 18, y + 50, 204, 16, pct, valid, color);
 }
 
-}  // namespace
+void draw_frame(Arduino_GFX *display, uint16_t accent) {
+    display->fillScreen(COLOR_BG);
+    display->drawRect(0, 0, 240, 240, accent);
+    display->drawRect(2, 2, 236, 236, COLOR_PANEL);
+}
 
-void xingzhi_meter_ui_draw(
+void draw_header(Arduino_GFX *display, const char *label, uint16_t accent) {
+    draw_text(display, 16, 12, "Claude", COLOR_TEXT, 2);
+    display->fillRect(146, 12, 76, 19, accent);
+    draw_clipped_text(display, 152, 17, label, COLOR_BG, 10);
+}
+
+void draw_key_value(
+    Arduino_GFX *display,
+    int16_t y,
+    const char *key,
+    const char *value,
+    uint16_t value_color = COLOR_TEXT
+) {
+    draw_text(display, 18, y, key, COLOR_DIM);
+    draw_clipped_text(display, 92, y, value, value_color, 20);
+}
+
+void draw_usage_screen(
     Arduino_GFX *display,
     const UsageData *data,
     MeterPayloadState payload_state,
@@ -104,13 +139,8 @@ void xingzhi_meter_ui_draw(
     char payload_buf[24];
     format_payload_state(payload_state, payload_buf, sizeof(payload_buf));
 
-    display->fillScreen(COLOR_BG);
-    display->drawRect(0, 0, 240, 240, accent);
-    display->drawRect(2, 2, 236, 236, COLOR_PANEL);
-
-    draw_text(display, 16, 12, "Claude", COLOR_TEXT, 2);
-    display->fillRect(156, 12, 66, 19, accent);
-    draw_text(display, 162, 17, level_label(level), COLOR_BG);
+    draw_frame(display, accent);
+    draw_header(display, level_label(level), accent);
 
     draw_usage_row(display, 48, "SESSION", view->session_pct, view->session_reset_mins, has_data, accent);
     draw_usage_row(display, 122, "WEEKLY", view->weekly_pct, view->weekly_reset_mins, has_data, accent);
@@ -119,10 +149,77 @@ void xingzhi_meter_ui_draw(
     draw_text(display, 18, 207, payload_buf, payload_state == MeterPayloadState::Invalid ? COLOR_RED : COLOR_DIM);
 
     if (detail && detail[0]) {
-        char clipped[25];
-        snprintf(clipped, sizeof(clipped), "%.24s", detail);
-        draw_text(display, 18, 222, clipped, COLOR_DIM);
+        draw_clipped_text(display, 18, 222, detail, COLOR_DIM, 24);
     } else if (payload_state == MeterPayloadState::NoData) {
         draw_text(display, 18, 222, "Send JSON line on COM7", COLOR_DIM);
+    }
+}
+
+void draw_status_screen(Arduino_GFX *display, const XingzhiUiState *state) {
+    const bool has_error = state && state->last_error && state->last_error[0];
+    const uint16_t accent = has_error ? COLOR_RED : COLOR_BLUE;
+    draw_frame(display, accent);
+    draw_header(display, "STATUS", accent);
+
+    draw_text(display, 18, 48, "Bluetooth", COLOR_TEXT, 2);
+    draw_key_value(display, 76, "state", state ? state->ble_state : "unknown", COLOR_TEXT);
+    draw_key_value(display, 96, "source", state ? state->last_source : "none", COLOR_TEXT);
+    draw_key_value(display, 116, "payload", state ? state->detail : "-", COLOR_TEXT);
+    draw_key_value(display, 136, "action", state ? state->last_action : "none", COLOR_TEXT);
+
+    char count_buf[16];
+    snprintf(count_buf, sizeof(count_buf), "%lu", static_cast<unsigned long>(state ? state->action_count : 0));
+    draw_key_value(display, 156, "count", count_buf, COLOR_TEXT);
+
+    display->drawFastHLine(16, 184, 208, COLOR_PANEL);
+    if (has_error) {
+        draw_clipped_text(display, 18, 198, state->last_error, COLOR_RED, 26);
+        draw_text(display, 18, 216, "Use serial fallback", COLOR_DIM);
+    } else {
+        draw_clipped_text(display, 18, 198, state && state->ble_detail ? state->ble_detail : "BLE not enabled yet", COLOR_DIM, 26);
+        draw_text(display, 18, 216, "Pair after BLE stage", COLOR_DIM);
+    }
+}
+
+void draw_splash_screen(Arduino_GFX *display, const XingzhiUiState *state) {
+    draw_frame(display, COLOR_AMBER);
+    draw_text(display, 26, 38, "Clawdmeter", COLOR_TEXT, 3);
+    draw_text(display, 39, 82, "Xingzhi", COLOR_AMBER, 2);
+    display->drawCircle(120, 138, 34, COLOR_DIM);
+    display->drawCircle(120, 138, 22, COLOR_BLUE);
+    display->fillCircle(108, 132, 4, COLOR_TEXT);
+    display->fillCircle(132, 132, 4, COLOR_TEXT);
+    display->drawFastHLine(107, 151, 26, COLOR_TEXT);
+    draw_text(display, 32, 194, "cycle: usage/status/splash", COLOR_DIM);
+    draw_clipped_text(display, 32, 214, state ? state->last_action : "none", COLOR_DIM, 24);
+}
+
+}  // namespace
+
+void xingzhi_meter_ui_draw(
+    Arduino_GFX *display,
+    const UsageData *data,
+    MeterPayloadState payload_state,
+    const char *detail
+) {
+    draw_usage_screen(display, data, payload_state, detail);
+}
+
+void xingzhi_meter_ui_draw_screen(Arduino_GFX *display, const XingzhiUiState *state) {
+    if (!display || !state) {
+        return;
+    }
+
+    switch (state->screen) {
+    case XingzhiScreen::Status:
+        draw_status_screen(display, state);
+        break;
+    case XingzhiScreen::Splash:
+        draw_splash_screen(display, state);
+        break;
+    case XingzhiScreen::Usage:
+    default:
+        draw_usage_screen(display, state->data, state->payload_state, state->detail);
+        break;
     }
 }
