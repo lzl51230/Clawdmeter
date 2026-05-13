@@ -41,6 +41,14 @@ python3 tools/backup_xingzhi_flash.py --port COM7 --dry-run
 pio run -d firmware -e xingzhi_display_bringup
 ```
 
+After the display test passes, build the manual USB serial meter target and send
+test payloads from Windows. See [docs/xingzhi-serial-meter.md](docs/xingzhi-serial-meter.md).
+
+```bash
+pio run -d firmware -e xingzhi_serial_meter
+python3 tools/send_test_payload.py normal --dry-run
+```
+
 ## Prerequisites
 
 - Linux (tested on Ubuntu)

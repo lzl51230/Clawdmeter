@@ -1,5 +1,4 @@
 #pragma once
-#include <Arduino.h>
 
 struct UsageData {
     float session_pct;       // 5-hour window utilization (0-100)

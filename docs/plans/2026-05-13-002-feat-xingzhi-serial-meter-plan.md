@@ -1,7 +1,7 @@
 ---
 title: feat: 将 Xingzhi 显示验证推进为串口用量仪表
 type: feat
-status: active
+status: completed
 date: 2026-05-13
 origin: docs/brainstorms/2026-05-13-xingzhi-clawdmeter-adaptation-requirements.md
 prerequisite: docs/plans/2026-05-13-001-feat-xingzhi-display-bringup-plan.md
