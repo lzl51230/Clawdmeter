@@ -109,6 +109,45 @@ class BackupXingzhiFlashTest(unittest.TestCase):
             self.assertEqual(output.stat().st_size, 2048)
             self.assertEqual(output.read_bytes(), (b"\x00" * 1024) + (b"\x01" * 1024))
 
+    def test_chunked_backup_reuses_existing_chunk_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "backup.bin"
+            chunk_dir = output.parent / f".{output.name}.chunks"
+            chunk_dir.mkdir()
+            (chunk_dir / "part-00000000.bin").write_bytes(b"\x00" * 1024)
+
+            def handler(args):
+                if args[-1] == "flash-id":
+                    return backup_tool.CommandResult(args, 0, "Detected flash size: 2KB\n", "")
+                start = int(args[-3], 16)
+                size = int(args[-2], 16)
+                Path(args[-1]).write_bytes(bytes([start // 1024]) * size)
+                return backup_tool.CommandResult(args, 0, f"Read {size} bytes\n", "")
+
+            runner = FakeRunner(handler)
+            stdout = io.StringIO()
+            code = backup_tool.run(
+                [
+                    "--port",
+                    "COM7",
+                    "--output",
+                    str(output),
+                    "--chunk-size",
+                    "1KB",
+                ],
+                runner=runner,
+                stdout=stdout,
+                stderr=io.StringIO(),
+            )
+
+            self.assertEqual(code, 0)
+            self.assertEqual(output.read_bytes(), (b"\x00" * 1024) + (b"\x01" * 1024))
+            self.assertFalse(chunk_dir.exists())
+            read_calls = [call for call in runner.calls if "read-flash" in call]
+            self.assertEqual(len(read_calls), 1)
+            self.assertEqual(read_calls[0][-3:-1], ["0x400", "0x400"])
+            self.assertIn("Reusing cached chunk 0x0+0x400", stdout.getvalue())
+
     def test_chunked_backup_retries_failed_part(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "backup.bin"

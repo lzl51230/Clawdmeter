@@ -178,7 +178,7 @@ def read_flash_chunked(
     stdout: TextIO,
 ) -> CommandResult:
     chunk_dir = output.parent / f".{output.name}.chunks"
-    chunk_dir.mkdir(parents=True)
+    chunk_dir.mkdir(parents=True, exist_ok=True)
 
     offset = 0
     parts: list[tuple[Path, int]] = []
