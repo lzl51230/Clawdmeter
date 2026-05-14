@@ -1,10 +1,12 @@
 # Clawdmeter
 
-A small ESP32 dashboard I made for my desk to keep an eye on Claude Code usage.
+A small ESP32 dashboard for keeping an eye on Claude Code or Codex usage.
 
-It runs on a [Waveshare ESP32-S3-Touch-AMOLED-2.16](https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-2.16) and pairs with my laptop over Bluetooth, and the splash screen plays pixel-art Clawd animations that get
-busier when your usage rate climbs. The two side buttons send Space and
-Shift+Tab over BLE HID for Claude Code's voice mode and mode-toggle shortcuts.
+This fork is adapted for the Xiaozhi/Xingzhi `xingzhi-cube-1.54tft-wifi`
+device. It pairs with a Windows host over Bluetooth, shows usage on the 240×240
+ST7789 screen, and plays pixel-art Clawd animations that get busier when your
+usage rate climbs. The physical buttons send Space and Shift+Tab over BLE HID
+for Claude Code voice mode and mode-toggle shortcuts.
 
 |              Usage meter              |              Clawd animation screen              |
 | :-----------------------------------: | :----------------------------------------------: |
@@ -14,26 +16,41 @@ The Clawd animations come from [claudepix](https://claudepix.vercel.app), [@amaa
 
 ## Screens
 
-The device boots into the splash and stays there until you press the middle (PWR) button, which cycles between Usage and Bluetooth. Tap the screen anywhere (except the Reset zone on the Bluetooth screen) to flip back to the splash; tap again to dismiss it.
+The Xingzhi parity target boots into the usage screen. The UI button cycles
+between Usage, Status, and Splash. While the splash is up, a short press cycles
+Clawd animations and a long press returns to the previous non-splash screen.
 
-|              Splash               |              Usage              |                Bluetooth                |
+|              Splash               |              Usage              |                 Status                  |
 | :-------------------------------: | :-----------------------------: | :-------------------------------------: |
-| ![Splash](screenshots/splash.png) | ![Usage](screenshots/usage.png) | ![Bluetooth](screenshots/bluetooth.png) |
-|   Splash; touch-toggle anytime    | Session and weekly utilization  |    Connection status and bond reset     |
+| ![Splash](screenshots/splash.png) | ![Usage](screenshots/usage.png) | ![Status](screenshots/bluetooth.png) |
+|        Clawd animation loop       | Session and weekly utilization  |    Connection/status diagnostics        |
 
-While the splash is up, the middle button cycles animations instead of screens. The firmware also auto-rotates every 20 s within the current usage-rate group, so a long stretch on the splash isn't just one Clawd on loop.
+The firmware also auto-rotates every 20 s within the current usage-rate group,
+so a long stretch on the splash isn't just one Clawd on loop.
 
 ## Hardware
 
-- [Waveshare ESP32-S3-Touch-AMOLED-2.16](https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-2.16) — ESP32-S3R8, 2.16" 480×480 AMOLED (CO5300 QSPI), CST9220 cap touch, AXP2101 PMU + Li-Po battery, QMI8658 IMU
-- USB-C cable for flashing firmware and charging
-- 3.7V Li-Po battery (MX1.25 2-pin connector, optional)
+- Xiaozhi/Xingzhi `xingzhi-cube-1.54tft-wifi` — ESP32-S3 device with a 1.54"
+  240×240 ST7789 TFT screen.
+- USB-C cable for backing up the stock Xiaozhi firmware, flashing Clawdmeter,
+  serial debug, and power.
+- No hardware modification is required. The adaptation is firmware plus
+  host-side tooling.
+- The current board profile uses the Xiaozhi ST7789 wiring: SDA GPIO10, SCL
+  GPIO9, DC GPIO8, CS GPIO14, RES GPIO18, and BACKLIGHT GPIO13.
+- The current parity firmware uses GPIO0 for UI cycle/splash control, GPIO40
+  for Space, GPIO39 for Shift+Tab, GPIO38 for charge-state sensing, and ADC2
+  channel 6 for battery voltage telemetry.
+- The original [Waveshare ESP32-S3-Touch-AMOLED-2.16](https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-2.16)
+  target remains in the repository as the upstream/default hardware target.
 
 ## Xingzhi display bring-up
 
 The fork includes an isolated first-stage target for `xingzhi-cube-1.54tft-wifi`.
 It backs up the current Xiaozhi firmware, then builds a minimal 240×240 ST7789
 test screen without BLE, LVGL UI, touch, PMU, IMU, splash, or usage-meter logic.
+No hardware modification to the Xingzhi device is required; adaptation is done
+through firmware flashing and host-side tools.
 See [docs/xingzhi-display-bringup.md](docs/xingzhi-display-bringup.md).
 
 ```bash
@@ -60,12 +77,32 @@ pio run -d firmware -e xingzhi_parity
 py -3 tools\xingzhi_debug.py status --port COM7
 ```
 
+On Windows, the Xingzhi BLE helper defaults to Codex usage from WSL session logs
+and falls back to paired-device direct connect when scanning cannot see an
+already paired `Claude Controller`. Codex payloads include `src=codex`, so the
+usage screen title changes to `Codex`; Claude API payloads include `src=claude`
+and keep the `Claude` title.
+
+```powershell
+py -3 -m pip install bleak pyserial esptool
+py -3 tools\windows_claude_usage_ble.py --dry-run
+py -3 tools\windows_claude_usage_ble.py --require-ack
+py -3 tools\windows_claude_usage_ble.py --usage-source claude --require-ack
+py -3 tools\xingzhi_debug.py screenshot --port COM7 --output usage.bmp
+```
+
+The current Xingzhi 1.54 WiFi board has no confirmed IMU configuration in the
+local Xiaozhi board files, so `probe imu` reports `not_available` and automatic
+rotation remains disabled for this target.
+
 ## Prerequisites
 
 - Linux (tested on Ubuntu)
 - [PlatformIO CLI](https://docs.platformio.org/en/latest/core/installation/index.html)
 - `curl`, `bluetoothctl`, `busctl` (BlueZ Bluetooth stack)
 - Claude Code with an active subscription
+- For Xingzhi on Windows: Python 3 with `bleak`, `pyserial`, and `esptool`; WSL
+  Codex usage uses `~/.codex/sessions/**/*.jsonl` by default
 
 ## MacOS support
 
@@ -93,7 +130,8 @@ bluetoothctl pair F4:12:FA:C0:8F:E5    # use your device's MAC
 bluetoothctl trust F4:12:FA:C0:8F:E5
 ```
 
-The MAC address is shown on the Bluetooth screen — press the middle (PWR) button to cycle to it.
+On Xingzhi, the MAC address is shown in the serial `status` output and on the
+Status screen; press the UI button to cycle to it.
 
 ## Install the daemon
 
@@ -108,25 +146,33 @@ Check status: `systemctl --user status claude-usage-daemon`
 
 View logs: `journalctl --user -u claude-usage-daemon -f`
 
+For Xingzhi on Windows, use `tools\windows_claude_usage_ble.py` instead of the
+Linux user daemon. In watch mode it polls every 60 seconds by default; adjust
+with `--poll-interval`.
+
 ## How it works
 
-1. The daemon reads your Claude Code OAuth token from `~/.claude/.credentials.json`.
+1. The Linux daemon reads your Claude Code OAuth token from `~/.claude/.credentials.json`.
 2. It makes a minimal API call to `api.anthropic.com/v1/messages` — one token of Haiku, basically free.
-3. The usage numbers come straight out of the response headers (`anthropic-ratelimit-unified-5h-utilization` and friends).
-4. The daemon connects to the ESP32 over BLE and writes a JSON payload to the GATT RX characteristic.
-5. The firmware parses it and updates the LVGL dashboard.
+3. The Windows Xingzhi helper defaults to Codex usage by reading the latest WSL
+   Codex `token_count` rate-limit event from `~/.codex/sessions/**/*.jsonl`.
+4. Both paths write the same compact JSON payload to the ESP32 BLE GATT RX characteristic.
+5. The firmware parses it and updates the usage dashboard. When `src` is `codex`,
+   the Xingzhi usage header shows `Codex`; missing or unknown `src` defaults to
+   `Claude` for backward compatibility.
 6. The firmware also tracks the rate of change of session % over a 5-minute window and picks splash animations from the matching mood group.
-7. The two side buttons are independent of all of this — they send Space and Shift+Tab as BLE HID keyboard input to the paired host directly.
+7. The side buttons are independent of all of this — they send Space and Shift+Tab as BLE HID keyboard input to the paired host directly.
 
 ## Physical buttons
 
-The board has three side buttons. Left and right do the same thing on every screen; the middle button is screen-aware.
+The Xingzhi parity target maps the three hardware buttons to UI and BLE HID
+actions:
 
-| Button           | GPIO         | Function                                                       |
-| ---------------- | ------------ | -------------------------------------------------------------- |
-| **Left**         | GPIO 0       | Hold to send Space (Claude Code voice-mode push-to-talk)       |
-| **Middle** (PWR) | AXP2101 PKEY | Cycle screens (Usage ↔ Bluetooth); on splash, cycle animations |
-| **Right**        | GPIO 18      | Press to send Shift+Tab (Claude Code mode toggle)              |
+| Button       | GPIO   | Function                                                    |
+| ------------ | ------ | ----------------------------------------------------------- |
+| **UI**       | GPIO 0 | Cycle Usage/Status/Splash; on splash, short press advances animation and long press exits splash |
+| **Space**    | GPIO40 | Send Space as BLE HID keyboard input                        |
+| **Shift+Tab** | GPIO39 | Send Shift+Tab as BLE HID keyboard input                    |
 
 Space and Shift+Tab go out as standard BLE HID keyboard reports, so they trigger in whatever window has focus on the paired host — not just Claude Code.
 
@@ -139,15 +185,16 @@ The device advertises a custom GATT service alongside the standard HID keyboard 
 | **Data Service**           | `4c41555a-4465-7669-6365-000000000001` |
 | RX Characteristic (write)  | `4c41555a-4465-7669-6365-000000000002` |
 | TX Characteristic (notify) | `4c41555a-4465-7669-6365-000000000003` |
+| REQ Characteristic (notify) | `4c41555a-4465-7669-6365-000000000004` |
 | **HID Service**            | `00001812-0000-1000-8000-00805f9b34fb` |
 
 JSON payload format (written to RX):
 
 ```json
-{ "s": 45, "sr": 120, "w": 28, "wr": 7200, "st": "allowed", "ok": true }
+{ "s": 45, "sr": 120, "w": 28, "wr": 7200, "st": "allowed", "src": "codex", "ok": true }
 ```
 
-Fields: `s` = session %, `sr` = session reset (minutes), `w` = weekly %, `wr` = weekly reset (minutes), `st` = status, `ok` = success flag.
+Fields: `s` = session %, `sr` = session reset (minutes), `w` = weekly %, `wr` = weekly reset (minutes), `st` = status, `src` = optional usage source (`codex` or `claude`), `ok` = success flag. Older payloads without `src` are treated as Claude usage.
 
 ## Recompiling fonts
 
