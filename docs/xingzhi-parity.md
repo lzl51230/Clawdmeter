@@ -14,6 +14,11 @@
 - Xingzhi 三键输入：GPIO0 切屏，GPIO40 发送 Space，GPIO39 发送 Shift+Tab；HID 通过 BLE keyboard report 输出。
 - 电源遥测：GPIO38 读取充电状态，ADC2 channel 6 读取电池电压分段，样本稳定后在 status 屏显示电量。
 
+## 电源观察记录
+
+- 2026-05-14，Xingzhi 1.54 WiFi 通过 USB 连接 Windows/WSL 调试机供电时，串口 `status` 稳定报告 `power=valid`、`samples=3`、`adc=2443/2443` 到 `2444/2444`、`battery=100`、`charging=1`。
+- 当前未改动 ADC 分段校准，仍使用小智来源的 1970/2062/2154/2246/2338/2430 分段作为初始基线。U6 仅将 `valid` 电量同步到 BLE HID battery；`sampling`、`unavailable` 或 `error` 不发布新的 HID 电量。
+
 ## 构建与刷写
 
 ```powershell

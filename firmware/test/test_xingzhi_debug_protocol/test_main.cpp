@@ -51,6 +51,7 @@ void test_status_line_is_bounded_and_parseable() {
     status.ble = "disabled";
     status.ble_name = "Claude Controller";
     status.hid = "unavailable";
+    status.hid_battery = "80";
     status.power = "valid";
     status.battery = "80";
     status.charging = "1";
@@ -77,6 +78,7 @@ void test_status_line_is_bounded_and_parseable() {
     TEST_ASSERT_NOT_NULL(strstr(line, "source=serial"));
     TEST_ASSERT_NOT_NULL(strstr(line, "ble_name=Claude_Controller"));
     TEST_ASSERT_NOT_NULL(strstr(line, "hid=unavailable"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "hid_battery=80"));
     TEST_ASSERT_NOT_NULL(strstr(line, "power=valid"));
     TEST_ASSERT_NOT_NULL(strstr(line, "battery=80"));
     TEST_ASSERT_NOT_NULL(strstr(line, "splash=idle_breathe"));

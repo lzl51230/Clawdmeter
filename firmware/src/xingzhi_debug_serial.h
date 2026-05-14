@@ -30,6 +30,7 @@ struct XingzhiDebugStatus {
     const char *ble_name = "";
     const char *ble_mac = "";
     const char *hid = "";
+    const char *hid_battery = "";
     const char *power = "";
     const char *battery = "";
     const char *charging = "";

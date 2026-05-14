@@ -63,6 +63,7 @@ int last_power_level = -2;
 uint8_t last_power_samples = 255;
 bool last_power_charging = false;
 bool display_ready = false;
+int last_hid_battery_level = -1;
 
 constexpr uint8_t HID_KEY_SPACE = 0x2C;
 constexpr uint8_t HID_KEY_TAB = 0x2B;
@@ -130,6 +131,7 @@ void send_status() {
     char charging[4];
     char adc[20];
     char samples[8];
+    char hid_battery[8];
     char splash_frame[20];
     XingzhiPowerStatus power = xingzhi_power_status();
     if (power.valid) {
@@ -145,6 +147,7 @@ void send_status() {
         snprintf(adc, sizeof(adc), "-");
     }
     snprintf(samples, sizeof(samples), "%u", static_cast<unsigned int>(power.sample_count));
+    snprintf(hid_battery, sizeof(hid_battery), "%d", xingzhi_ble_battery_level());
     XingzhiSplashSnapshot splash = xingzhi_splash_anim_snapshot(&splash_anim);
     if (splash.valid) {
         snprintf(
@@ -169,6 +172,7 @@ void send_status() {
     status.ble_name = xingzhi_ble_device_name();
     status.ble_mac = xingzhi_ble_mac();
     status.hid = xingzhi_ble_hid_available() ? "available" : "unavailable";
+    status.hid_battery = hid_battery;
     status.power = power.state;
     status.battery = battery;
     status.charging = charging;
@@ -574,6 +578,11 @@ void poll_buttons() {
 void poll_power(uint32_t now_ms) {
     xingzhi_power_tick(now_ms);
     XingzhiPowerStatus power = xingzhi_power_status();
+    if (power.hid_level >= 0 && power.hid_level != last_hid_battery_level) {
+        if (xingzhi_ble_set_battery_level(power.hid_level)) {
+            last_hid_battery_level = power.hid_level;
+        }
+    }
     if (
         strcmp(power.state, last_power_state) != 0 ||
         power.level != last_power_level ||

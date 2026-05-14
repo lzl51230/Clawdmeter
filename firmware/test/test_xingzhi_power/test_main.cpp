@@ -18,12 +18,14 @@ void test_status_remains_sampling_until_required_samples() {
     TEST_ASSERT_FALSE(status.valid);
     TEST_ASSERT_EQUAL_STRING("sampling", status.state);
     TEST_ASSERT_EQUAL(1, status.sample_count);
+    TEST_ASSERT_EQUAL(-1, status.hid_level);
 
     xingzhi_power_record_sample(2154, true);
     status = xingzhi_power_status();
     TEST_ASSERT_FALSE(status.valid);
     TEST_ASSERT_EQUAL_STRING("sampling", status.state);
     TEST_ASSERT_EQUAL(2, status.sample_count);
+    TEST_ASSERT_EQUAL(-1, status.hid_level);
 }
 
 void test_three_samples_produce_valid_average_level() {
@@ -40,7 +42,27 @@ void test_three_samples_produce_valid_average_level() {
     TEST_ASSERT_TRUE(status.charging);
     TEST_ASSERT_EQUAL(2154, status.average_adc);
     TEST_ASSERT_EQUAL(40, status.level);
+    TEST_ASSERT_EQUAL(40, status.hid_level);
     TEST_ASSERT_EQUAL(3, status.sample_count);
+}
+
+void test_charging_flag_changes_are_reported() {
+    xingzhi_power_init();
+    xingzhi_power_reset_samples();
+
+    xingzhi_power_record_sample(2338, false);
+    xingzhi_power_record_sample(2338, false);
+    xingzhi_power_record_sample(2338, false);
+    XingzhiPowerStatus status = xingzhi_power_status();
+    TEST_ASSERT_TRUE(status.valid);
+    TEST_ASSERT_FALSE(status.charging);
+
+    xingzhi_power_record_sample(2430, true);
+    xingzhi_power_record_sample(2430, true);
+    xingzhi_power_record_sample(2430, true);
+    status = xingzhi_power_status();
+    TEST_ASSERT_TRUE(status.valid);
+    TEST_ASSERT_TRUE(status.charging);
 }
 
 void test_invalid_sample_reports_error() {
@@ -52,6 +74,7 @@ void test_invalid_sample_reports_error() {
 
     TEST_ASSERT_FALSE(status.valid);
     TEST_ASSERT_EQUAL_STRING("error", status.state);
+    TEST_ASSERT_EQUAL(-1, status.hid_level);
 }
 
 int main(int argc, char **argv) {
@@ -59,6 +82,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_adc_level_clamps_to_known_bands);
     RUN_TEST(test_status_remains_sampling_until_required_samples);
     RUN_TEST(test_three_samples_produce_valid_average_level);
+    RUN_TEST(test_charging_flag_changes_are_reported);
     RUN_TEST(test_invalid_sample_reports_error);
     return UNITY_END();
 }

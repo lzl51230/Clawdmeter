@@ -56,6 +56,7 @@ int sample_sum() {
 void clear_status() {
     sample_count = 0;
     sample_index = 0;
+    charging_now = false;
     raw_adc = -1;
     average_adc = -1;
     battery_level = -1;
@@ -110,6 +111,7 @@ void xingzhi_power_init() {
     initialized = true;
     adc_ready = false;
     read_error = false;
+    last_poll_ms = 0;
     clear_status();
 
 #ifdef ARDUINO
@@ -188,5 +190,6 @@ XingzhiPowerStatus xingzhi_power_status() {
 
     status.state = "valid";
     status.valid = true;
+    status.hid_level = battery_level;
     return status;
 }

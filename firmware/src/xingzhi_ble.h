@@ -26,5 +26,7 @@ void xingzhi_ble_send_nack();
 void xingzhi_ble_request_refresh();
 bool xingzhi_ble_reset_pairing();
 bool xingzhi_ble_hid_available();
+bool xingzhi_ble_set_battery_level(int level);
+int xingzhi_ble_battery_level();
 bool xingzhi_ble_keyboard_press(uint8_t key, uint8_t modifier);
 bool xingzhi_ble_keyboard_release();

@@ -9,6 +9,7 @@ struct XingzhiPowerStatus {
     int raw_adc = -1;
     int average_adc = -1;
     int level = -1;
+    int hid_level = -1;
     uint8_t sample_count = 0;
 };
 

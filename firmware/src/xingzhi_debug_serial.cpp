@@ -117,7 +117,7 @@ int xingzhi_debug_format_status(const XingzhiDebugStatus *status, char *buf, siz
     return snprintf(
         buf,
         len,
-        "XDBG STATUS target=%s screen=%s width=%d height=%d payload=%s source=%s ble=%s ble_name=%s ble_mac=%s hid=%s power=%s battery=%s charging=%s adc=%s samples=%s uptime_ms=%lu framebuffer=%s detail=%s action=%s event=%s action_count=%lu action_error=%s splash=%s splash_group=%s splash_category=%s splash_frame=%s",
+        "XDBG STATUS target=%s screen=%s width=%d height=%d payload=%s source=%s ble=%s ble_name=%s ble_mac=%s hid=%s hid_battery=%s power=%s battery=%s charging=%s adc=%s samples=%s uptime_ms=%lu framebuffer=%s detail=%s action=%s event=%s action_count=%lu action_error=%s splash=%s splash_group=%s splash_category=%s splash_frame=%s",
         safe_value(status->target),
         safe_value(status->screen),
         status->width,
@@ -128,6 +128,7 @@ int xingzhi_debug_format_status(const XingzhiDebugStatus *status, char *buf, siz
         ble_name,
         safe_value(status->ble_mac),
         safe_value(status->hid),
+        safe_value(status->hid_battery),
         safe_value(status->power),
         safe_value(status->battery),
         safe_value(status->charging),

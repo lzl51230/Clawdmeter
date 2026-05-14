@@ -55,6 +55,7 @@ char mac_str[18] = {};
 volatile bool data_ready = false;
 volatile bool error_ready = false;
 volatile bool has_received_data = false;
+int hid_battery_level = 100;
 
 void copy_error(const char *message) {
     snprintf(last_error, sizeof(last_error), "%s", message ? message : "");
@@ -150,7 +151,8 @@ void xingzhi_ble_init() {
     hid_dev->setManufacturer("Anthropic");
     hid_dev->setPnp(0x02, 0x05AC, 0x820A, 0x0210);
     hid_dev->setHidInfo(0x00, 0x02);
-    hid_dev->setBatteryLevel(100);
+    hid_battery_level = 100;
+    hid_dev->setBatteryLevel(hid_battery_level);
     input_kbd = hid_dev->getInputReport(1);
 
     NimBLEService *service = server->createService(SERVICE_UUID);
@@ -280,6 +282,19 @@ bool xingzhi_ble_reset_pairing() {
 
 bool xingzhi_ble_hid_available() {
     return state == XingzhiBleState::Connected && input_kbd != nullptr;
+}
+
+bool xingzhi_ble_set_battery_level(int level) {
+    if (!hid_dev || level < 0 || level > 100) {
+        return false;
+    }
+    hid_battery_level = level;
+    hid_dev->setBatteryLevel(static_cast<uint8_t>(level));
+    return true;
+}
+
+int xingzhi_ble_battery_level() {
+    return hid_battery_level;
 }
 
 bool xingzhi_ble_keyboard_press(uint8_t key, uint8_t modifier) {
