@@ -85,11 +85,16 @@ BLE 固件刷写后，Windows 侧可用固定 payload 验证 GATT 写入：
 ```powershell
 py -3 -m pip install bleak
 py -3 tools\windows_claude_usage_ble.py --test-preset high --require-ack
+py -3 tools\windows_claude_usage_ble.py --require-ack
 py -3 tools\xingzhi_debug.py status --port COM7
 py -3 tools\xingzhi_debug.py screenshot --port COM7 --output ble-high.bmp
 ```
 
 通过闸门：BLE 工具输出 `BLE write succeeded` 和 `Device acknowledged payload`；串口状态显示 `source=ble`、`payload=valid`、`detail=limited`，截图读数为 88%/82%。
+
+默认真实用量来源就是 `--usage-source codex-wsl`，会从 WSL 的 `~/.codex/sessions/**/*.jsonl` 读取最近 Codex 用量事件，并发送 `src=codex` 让 usage 屏标题显示 `Codex`；Windows 下默认通过 `wslpath` 自动定位，也可用 `--codex-home` 指定路径。需要 Claude API 用量时，显式传入 `--usage-source claude`，该模式发送 `src=claude`。旧 payload 或测试 preset 缺少 `src` 时默认按 Claude 处理。
+
+如果 Windows 已连接 `Claude Controller` 但扫描不到广播，工具会从系统已配对设备中回退解析 BLE 地址并直接连接。也可以从 `status` 输出复制 `ble_mac`，显式执行 `py -3 tools\windows_claude_usage_ble.py --address <ble_mac> --test-preset high --require-ack`。
 
 BLE 配对状态异常或 Windows GATT 缓存不一致时，可先通过串口触发恢复：
 

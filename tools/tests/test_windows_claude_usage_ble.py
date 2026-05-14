@@ -27,12 +27,36 @@ class FakeDevice:
         self.name = name
 
 
+class FakeDirectDevice(FakeDevice):
+    def __init__(self, address, name="", details=None):
+        super().__init__(address, name)
+        self.details = details
+
+
+class FakeDeviceInfo:
+    def __init__(self, name, device_id):
+        self.name = name
+        self.id = device_id
+
+
 class FakeScanner:
     discovered = {}
 
     @classmethod
     async def discover(cls, timeout=10.0, return_adv=False):
         return cls.discovered
+
+
+class FailingScanner:
+    @classmethod
+    async def discover(cls, timeout=10.0, return_adv=False):
+        raise AssertionError("address mode should not scan")
+
+
+class EmptyScanner:
+    @classmethod
+    async def discover(cls, timeout=10.0, return_adv=False):
+        return {}
 
 
 class FakeClient:
@@ -133,6 +157,87 @@ class WindowsClaudeUsageBleTest(unittest.TestCase):
         self.assertEqual(payload["w"], 42)
         self.assertEqual(payload["wr"], 60)
         self.assertEqual(payload["st"], "limited")
+        self.assertEqual(payload["src"], "claude")
+
+    def test_payload_from_codex_rate_limits_converts_usage_windows(self):
+        payload = json.loads(
+            ble_tool.build_payload_from_codex_rate_limits(
+                {
+                    "primary": {"used_percent": 23, "resets_at": 1300},
+                    "secondary": {"used_percent": 52, "resets_at": 4600},
+                    "plan_type": "pro",
+                    "rate_limit_reached_type": None,
+                },
+                now=1000,
+            )
+        )
+
+        self.assertEqual(payload["s"], 23)
+        self.assertEqual(payload["sr"], 5)
+        self.assertEqual(payload["w"], 52)
+        self.assertEqual(payload["wr"], 60)
+        self.assertEqual(payload["st"], "allowed")
+        self.assertEqual(payload["src"], "codex")
+
+    def test_payload_from_codex_rate_limits_marks_limit_reached(self):
+        payload = json.loads(
+            ble_tool.build_payload_from_codex_rate_limits(
+                {
+                    "primary": {"used_percent": 100, "reset_after_seconds": 120},
+                    "secondary": {"used_percent": 20, "reset_after_seconds": 3600},
+                    "rate_limit_reached_type": "primary",
+                },
+                now=1000,
+            )
+        )
+
+        self.assertEqual(payload["s"], 100)
+        self.assertEqual(payload["sr"], 2)
+        self.assertEqual(payload["st"], "limited")
+
+    def test_codex_wsl_dry_run_reads_latest_session_payload(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            codex_home = Path(tmpdir)
+            session = codex_home / "sessions" / "2026" / "05" / "14" / "rollout.jsonl"
+            session.parent.mkdir(parents=True)
+            session.write_text(
+                "\n".join(
+                    [
+                        json.dumps({"type": "event_msg", "payload": {"type": "other"}}),
+                        json.dumps(
+                            {
+                                "timestamp": "2026-05-14T02:45:05.274Z",
+                                "type": "event_msg",
+                                "payload": {
+                                    "type": "token_count",
+                                    "rate_limits": {
+                                        "primary": {"used_percent": 9, "resets_at": 1300},
+                                        "secondary": {"used_percent": 37, "resets_at": 4600},
+                                        "plan_type": "pro",
+                                    },
+                                },
+                            }
+                        ),
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            code = ble_tool.run(
+                ["--codex-home", str(codex_home), "--dry-run"],
+                stdout=stdout,
+                stderr=io.StringIO(),
+                now_fn=lambda: 1000,
+                bleak_loader=lambda: (_ for _ in ()).throw(AssertionError("should not import bleak")),
+            )
+
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue().split("Payload: ", 1)[1])
+        self.assertEqual(payload["s"], 9)
+        self.assertEqual(payload["w"], 37)
+        self.assertEqual(payload["st"], "allowed")
+        self.assertEqual(payload["src"], "codex")
 
     def test_read_access_token_finds_nested_token(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -144,7 +249,7 @@ class WindowsClaudeUsageBleTest(unittest.TestCase):
     def test_missing_credentials_returns_actionable_error(self):
         stderr = io.StringIO()
         code = ble_tool.run(
-            ["--credentials", "/no/such/file", "--dry-run"],
+            ["--usage-source", "claude", "--credentials", "/no/such/file", "--dry-run"],
             stdout=io.StringIO(),
             stderr=stderr,
         )
@@ -167,6 +272,19 @@ class WindowsClaudeUsageBleTest(unittest.TestCase):
 
         self.assertEqual(choice.address, "BB:BB:BB:BB:BB:BB")
         self.assertTrue(choice.service_match)
+
+    def test_select_paired_windows_address_prefers_custom_service(self):
+        infos = [
+            FakeDeviceInfo("Claude Controller", r"\\?\BTHLE#Dev_111111111111#a&x&0&111111111111#{781aee18-7733}"),
+            FakeDeviceInfo(
+                "Claude Controller",
+                r"\\?\BTHLEDevice#{4c41555a-4465-7669-6365-000000000001}_Dev_VID&0205ac_PID&820a_REV&0210_94a9901b6dfd#b&x&2&0025#{4c41555a-4465-7669-6365-000000000001}",
+            ),
+        ]
+
+        address = ble_tool._select_paired_windows_address(infos, "Claude Controller", ble_tool.SERVICE_UUID)
+
+        self.assertEqual(address, "94:A9:90:1B:6D:FD")
 
     def test_missing_bleak_import_reports_install_command(self):
         def missing_bleak():
@@ -217,6 +335,50 @@ class WindowsClaudeUsageBleTest(unittest.TestCase):
         self.assertEqual(FakeClient.instances[0].writes[0][0], ble_tool.RX_CHAR_UUID)
         self.assertIn(b'"s":88', FakeClient.instances[0].writes[0][1])
         self.assertIn("Device acknowledged payload", stdout.getvalue())
+
+    def test_address_mode_skips_scan_and_uses_direct_ble_device(self):
+        stdout = io.StringIO()
+        config = ble_tool.BleConfig(address="94:A9:90:1B:6D:FD", ack_timeout=0.1)
+
+        ok = asyncio.run(
+            ble_tool.run_ble_session(
+                config,
+                lambda: ble_tool.build_preset_payload("high"),
+                stdout,
+                FailingScanner,
+                FakeClient,
+                FakeDirectDevice,
+            )
+        )
+
+        self.assertTrue(ok)
+        self.assertIsInstance(FakeClient.instances[0].target, FakeDirectDevice)
+        self.assertEqual(FakeClient.instances[0].target.address, "94:A9:90:1B:6D:FD")
+        self.assertIn("Using direct BLE address", stdout.getvalue())
+
+    def test_scan_failure_uses_paired_windows_address_fallback(self):
+        stdout = io.StringIO()
+        config = ble_tool.BleConfig(ack_timeout=0.1)
+
+        async def paired_resolver(device_name, service_uuid):
+            return "94:A9:90:1B:6D:FD"
+
+        ok = asyncio.run(
+            ble_tool.run_ble_session(
+                config,
+                lambda: ble_tool.build_preset_payload("high"),
+                stdout,
+                EmptyScanner,
+                FakeClient,
+                FakeDirectDevice,
+                paired_resolver,
+            )
+        )
+
+        self.assertTrue(ok)
+        self.assertIsInstance(FakeClient.instances[0].target, FakeDirectDevice)
+        self.assertEqual(FakeClient.instances[0].target.address, "94:A9:90:1B:6D:FD")
+        self.assertIn("Found paired Windows BLE address", stdout.getvalue())
 
     def test_refresh_notification_triggers_immediate_second_write_in_watch_mode(self):
         FakeScanner.discovered = {

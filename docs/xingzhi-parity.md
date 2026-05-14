@@ -81,15 +81,18 @@ U7 IMU probe 通过标准：执行 `py -3 tools\xingzhi_debug.py probe imu --por
 ```powershell
 py -3 -m pip install bleak
 py -3 tools\windows_claude_usage_ble.py --test-preset high --require-ack
+py -3 tools\windows_claude_usage_ble.py --require-ack
 py -3 tools\windows_claude_usage_ble.py --dry-run
 py -3 tools\windows_claude_usage_ble.py --watch
 ```
 
-`--test-preset` 不访问 Claude API，适合先验证 BLE。真实用量模式读取 `%USERPROFILE%\.claude\.credentials.json` 内的 `accessToken`，调用 Claude Messages API 并把响应头压缩为 `{s,sr,w,wr,st,ok}` 后写入 RX characteristic。`--watch` 是第一版长期运行模式；扫描、连接、通知、写入和 ack/nack 失败会记录日志并重试。观察日志时建议使用 `py -3 -u` 避免 Windows stdout 缓冲。
+`--test-preset` 不访问真实数据源，适合先验证 BLE。默认真实用量模式等同 `--usage-source codex-wsl`，从 WSL 的 `~/.codex/sessions/**/*.jsonl` 读取最近 Codex `token_count` 用量；Windows 下会通过 `wslpath` 自动定位，也可用 `--codex-home` 指定 UNC 路径。Codex payload 会带 `src=codex`，usage 屏标题显示 `Codex`。需要 Claude API 用量时，显式传入 `--usage-source claude`；该模式读取 `%USERPROFILE%\.claude\.credentials.json` 内的 `accessToken`，调用 Claude Messages API 并把响应头压缩为 `{s,sr,w,wr,st,src,ok}` 后写入 RX characteristic，usage 屏标题显示 `Claude`。旧 payload 或测试 preset 缺少 `src` 时默认按 Claude 处理。`--watch` 是第一版长期运行模式；扫描、连接、通知、写入和 ack/nack 失败会记录日志并重试。观察日志时建议使用 `py -3 -u` 避免 Windows stdout 缓冲。
+
+Windows 已配对或已连接 BLE HID 后，设备可能不再出现在扫描结果里。主机工具会在扫描失败时查找 Windows 已配对设备并直连；必要时也可用串口 `status` 中的 `ble_mac` 手动传入 `--address`。
 
 ## UI 屏幕
 
-- `usage`：保留已验证的 session、weekly、reset、payload 状态和 high/error 颜色。
+- `usage`：保留已验证的 session、weekly、reset、payload 状态和 high/error 颜色；标题随数据源显示 `Claude` 或 `Codex`。
 - `status`：显示 BLE/HID 状态、最近数据来源、payload 细节、最后动作、电源读数和恢复提示。
 - `splash`：播放原版 Clawd 像素动画，按用量增长组自动轮换；splash 内 `cycle` 切换动画，`exit` 或长按 cycle 返回上一屏。
 

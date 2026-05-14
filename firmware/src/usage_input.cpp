@@ -27,6 +27,13 @@ void copy_status(char *dest, size_t len, const char *source) {
     snprintf(dest, len, "%s", source ? source : "unknown");
 }
 
+void copy_provider(char *dest, size_t len, const char *source) {
+    if (!dest || len == 0) {
+        return;
+    }
+    snprintf(dest, len, "%s", source && strcmp(source, "codex") == 0 ? "codex" : "claude");
+}
+
 }  // namespace
 
 UsageLineResult UsageLineReader::push(char c) {
@@ -84,6 +91,7 @@ UsageParseResult parse_usage_payload(const char *payload, UsageData *out) {
     out->weekly_pct = doc["w"] | 0.0f;
     out->weekly_reset_mins = doc["wr"] | -1;
     copy_status(out->status, sizeof(out->status), doc["st"] | "unknown");
+    copy_provider(out->provider, sizeof(out->provider), doc["src"] | "claude");
     out->ok = doc["ok"] | false;
     out->valid = out->ok;
 

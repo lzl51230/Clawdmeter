@@ -44,7 +44,7 @@ py -3 -m esptool --chip esp32s3 --port COM7 --baud 460800 write-flash 0x0 firmwa
 {"s":42,"sr":37,"w":28,"wr":720,"st":"allowed","ok":true,"valid":true}
 ```
 
-字段：`s` session 百分比，`sr` session reset 分钟，`w` weekly 百分比，`wr` weekly reset 分钟，`st` 状态，`ok` 表示 payload 成功。缺失 `sr` 或 `wr` 时显示 `Reset --`。
+字段：`s` session 百分比，`sr` session reset 分钟，`w` weekly 百分比，`wr` weekly reset 分钟，`st` 状态，`ok` 表示 payload 成功。可选 `src` 表示数据源，`codex` 会让 Xingzhi usage 屏标题显示 `Codex`，缺失或未知值默认 `Claude`。缺失 `sr` 或 `wr` 时显示 `Reset --`。
 
 ## 发送测试 Preset
 

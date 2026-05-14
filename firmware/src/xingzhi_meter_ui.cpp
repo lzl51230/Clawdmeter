@@ -104,10 +104,14 @@ void draw_frame(Arduino_GFX *display, uint16_t accent) {
     display->drawRect(2, 2, 236, 236, COLOR_PANEL);
 }
 
-void draw_header(Arduino_GFX *display, const char *label, uint16_t accent) {
-    draw_text(display, 16, 12, "Claude", COLOR_TEXT, 2);
+void draw_header(Arduino_GFX *display, const char *title, const char *label, uint16_t accent) {
+    draw_text(display, 16, 12, title, COLOR_TEXT, 2);
     display->fillRect(146, 12, 76, 19, accent);
     draw_clipped_text(display, 152, 17, label, COLOR_BG, 10);
+}
+
+const char *usage_title_for(const UsageData *data) {
+    return data && strcmp(data->provider, "codex") == 0 ? "Codex" : "Claude";
 }
 
 void draw_key_value(
@@ -140,7 +144,7 @@ void draw_usage_screen(
     format_payload_state(payload_state, payload_buf, sizeof(payload_buf));
 
     draw_frame(display, accent);
-    draw_header(display, level_label(level), accent);
+    draw_header(display, usage_title_for(view), level_label(level), accent);
 
     draw_usage_row(display, 48, "SESSION", view->session_pct, view->session_reset_mins, has_data, accent);
     draw_usage_row(display, 122, "WEEKLY", view->weekly_pct, view->weekly_reset_mins, has_data, accent);
@@ -159,7 +163,7 @@ void draw_status_screen(Arduino_GFX *display, const XingzhiUiState *state) {
     const bool has_error = state && state->last_error && state->last_error[0];
     const uint16_t accent = has_error ? COLOR_RED : COLOR_BLUE;
     draw_frame(display, accent);
-    draw_header(display, "STATUS", accent);
+    draw_header(display, "Claude", "STATUS", accent);
 
     draw_text(display, 18, 48, "Bluetooth", COLOR_TEXT, 2);
     draw_key_value(display, 76, "state", state ? state->ble_state : "unknown", COLOR_TEXT);

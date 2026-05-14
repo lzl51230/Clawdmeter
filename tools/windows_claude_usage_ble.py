@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Send Claude usage payloads to the Xingzhi firmware over Windows BLE."""
+"""Send usage payloads to the Xingzhi firmware over Windows BLE."""
 
 from __future__ import annotations
 
@@ -8,7 +8,10 @@ import asyncio
 from dataclasses import dataclass
 import importlib
 import json
+import os
 from pathlib import Path
+import re
+import subprocess
 import sys
 import time
 from typing import Any, Callable, Mapping, TextIO
@@ -22,6 +25,7 @@ TX_CHAR_UUID = "4c41555a-4465-7669-6365-000000000003"
 REQ_CHAR_UUID = "4c41555a-4465-7669-6365-000000000004"
 CLAUDE_MESSAGES_URL = "https://api.anthropic.com/v1/messages"
 DEFAULT_CREDENTIALS = Path.home() / ".claude" / ".credentials.json"
+DEFAULT_CODEX_SESSION_FILE_LIMIT = 200
 
 PRESETS = {
     "normal": {"s": 42, "sr": 37, "w": 28, "wr": 720, "st": "allowed", "ok": True},
@@ -32,6 +36,10 @@ PRESETS = {
 
 class MissingCredentialsError(RuntimeError):
     """Raised when Claude credentials are unavailable."""
+
+
+class MissingCodexUsageError(RuntimeError):
+    """Raised when Codex local usage data is unavailable."""
 
 
 class MissingBleakError(RuntimeError):
@@ -152,6 +160,7 @@ def build_payload_from_headers(headers: Mapping[str, Any], now: int | None = Non
         "w": _usage_percent(_get_header(headers, "anthropic-ratelimit-unified-7d-utilization", "0")),
         "wr": _reset_minutes(_get_header(headers, "anthropic-ratelimit-unified-7d-reset", "0"), now),
         "st": _get_header(headers, "anthropic-ratelimit-unified-5h-status", "unknown") or "unknown",
+        "src": "claude",
         "ok": True,
     }
     return compact_payload(payload)
@@ -188,12 +197,139 @@ def poll_claude_usage(
         return build_payload_from_headers(response.headers, now=int(now_fn()))
 
 
+def _number(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _codex_limit_reset_minutes(limit: Mapping[str, Any], now: int) -> int:
+    reset_at = limit.get("resets_at", limit.get("reset_at"))
+    if reset_at is not None:
+        return _reset_minutes(str(reset_at), now)
+
+    reset_after_seconds = limit.get("reset_after_seconds")
+    if reset_after_seconds is None:
+        return -1
+    return max(0, int(round(_number(reset_after_seconds) / 60.0)))
+
+
+def _codex_status(rate_limits: Mapping[str, Any], session_percent: int, weekly_percent: int) -> str:
+    if rate_limits.get("rate_limit_reached_type") or rate_limits.get("limit_reached") is True:
+        return "limited"
+    if rate_limits.get("allowed") is False:
+        return "limited"
+    if session_percent >= 100 or weekly_percent >= 100:
+        return "limited"
+    return "allowed"
+
+
+def build_payload_from_codex_rate_limits(rate_limits: Mapping[str, Any], now: int | None = None) -> str:
+    now = int(time.time()) if now is None else now
+    primary = rate_limits.get("primary") if isinstance(rate_limits.get("primary"), Mapping) else {}
+    secondary = rate_limits.get("secondary") if isinstance(rate_limits.get("secondary"), Mapping) else {}
+    session_percent = _usage_percent(str(primary.get("used_percent", "0")))
+    weekly_percent = _usage_percent(str(secondary.get("used_percent", "0")))
+    payload = {
+        "s": session_percent,
+        "sr": _codex_limit_reset_minutes(primary, now),
+        "w": weekly_percent,
+        "wr": _codex_limit_reset_minutes(secondary, now),
+        "st": _codex_status(rate_limits, session_percent, weekly_percent),
+        "src": "codex",
+        "ok": True,
+    }
+    return compact_payload(payload)
+
+
+def resolve_default_codex_home(wsl_distro: str | None = None) -> Path:
+    configured = os.environ.get("CODEX_HOME")
+    if configured:
+        return Path(configured).expanduser()
+
+    if sys.platform.startswith("win"):
+        command = 'wslpath -w "${CODEX_HOME:-$HOME/.codex}"'
+        args = ["wsl.exe"]
+        if wsl_distro:
+            args.extend(["-d", wsl_distro])
+        args.extend(["sh", "-lc", command])
+        try:
+            output = subprocess.check_output(args, stderr=subprocess.DEVNULL, text=True, timeout=5).strip()
+        except (FileNotFoundError, subprocess.SubprocessError):
+            output = ""
+        if output:
+            return Path(output)
+
+    return Path.home() / ".codex"
+
+
+def _codex_session_files(codex_home: Path, max_files: int) -> list[Path]:
+    sessions_dir = codex_home / "sessions"
+    if not sessions_dir.exists():
+        raise MissingCodexUsageError(f"Codex sessions directory not found: {sessions_dir}")
+
+    files = list(sessions_dir.rglob("*.jsonl"))
+    files.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+    return files[:max(1, max_files)]
+
+
+def _codex_rate_limits_from_event(event: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    payload = event.get("payload")
+    if not isinstance(payload, Mapping) or payload.get("type") != "token_count":
+        return None
+
+    rate_limits = payload.get("rate_limits") or event.get("rate_limits")
+    if isinstance(rate_limits, Mapping) and rate_limits:
+        return rate_limits
+    return None
+
+
+def read_latest_codex_rate_limits(codex_home: Path, max_files: int = DEFAULT_CODEX_SESSION_FILE_LIMIT) -> Mapping[str, Any]:
+    best_timestamp = ""
+    best_rate_limits: Mapping[str, Any] | None = None
+    for path in _codex_session_files(codex_home, max_files):
+        try:
+            lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+        except OSError:
+            continue
+
+        for line in lines:
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            rate_limits = _codex_rate_limits_from_event(event)
+            if not rate_limits:
+                continue
+            timestamp = str(event.get("timestamp", ""))
+            if not best_rate_limits or timestamp >= best_timestamp:
+                best_timestamp = timestamp
+                best_rate_limits = rate_limits
+
+    if not best_rate_limits:
+        raise MissingCodexUsageError(f"Codex token_count rate limits not found under: {codex_home / 'sessions'}")
+    return best_rate_limits
+
+
+def poll_codex_wsl_usage(
+    codex_home: Path | None = None,
+    now_fn: Callable[[], float] = time.time,
+    max_session_files: int = DEFAULT_CODEX_SESSION_FILE_LIMIT,
+    wsl_distro: str | None = None,
+) -> str:
+    resolved_home = codex_home or resolve_default_codex_home(wsl_distro)
+    rate_limits = read_latest_codex_rate_limits(resolved_home, max_files=max_session_files)
+    return build_payload_from_codex_rate_limits(rate_limits, now=int(now_fn()))
+
+
 def load_bleak():
     try:
         bleak = importlib.import_module("bleak")
+        bleak_device = importlib.import_module("bleak.backends.device")
     except ImportError as exc:
         raise MissingBleakError("bleak is required. Install it with: py -3 -m pip install bleak") from exc
-    return bleak.BleakScanner, bleak.BleakClient
+    return bleak.BleakScanner, bleak.BleakClient, bleak_device.BLEDevice
 
 
 def _iter_discovered(discovered: Any):
@@ -219,6 +355,49 @@ def _device_name(device: Any, advertisement: Any) -> str:
 def _service_uuids(advertisement: Any) -> set[str]:
     values = getattr(advertisement, "service_uuids", None) or []
     return {str(value).lower() for value in values}
+
+
+def _format_ble_address(value: str) -> str:
+    return ":".join(value[index : index + 2] for index in range(0, 12, 2)).upper()
+
+
+def _extract_ble_address_from_device_id(device_id: str) -> str | None:
+    matches = re.findall(r"(?:dev_|_)([0-9a-f]{12})(?=[#\\\\])", device_id.lower())
+    if not matches:
+        return None
+    return _format_ble_address(matches[-1])
+
+
+def _select_paired_windows_address(infos: Any, device_name: str, service_uuid: str) -> str | None:
+    service_token = service_uuid.lower()
+    fallback: str | None = None
+    for info in infos:
+        name = str(getattr(info, "name", "") or "")
+        device_id = str(getattr(info, "id", "") or "")
+        address = _extract_ble_address_from_device_id(device_id)
+        if not address:
+            continue
+
+        id_lower = device_id.lower()
+        name_match = name == device_name
+        service_match = service_token in id_lower
+        if name_match and service_match:
+            return address
+        if service_match or (name_match and fallback is None):
+            fallback = address
+    return fallback
+
+
+async def resolve_paired_windows_ble_address(device_name: str, service_uuid: str) -> str | None:
+    if not sys.platform.startswith("win"):
+        return None
+    try:
+        enumeration = importlib.import_module("winrt.windows.devices.enumeration")
+    except ImportError:
+        return None
+
+    infos = await enumeration.DeviceInformation.find_all_async()
+    return _select_paired_windows_address(infos, device_name, service_uuid)
 
 
 def select_device(
@@ -257,11 +436,36 @@ def select_device(
     return choices[0]
 
 
-async def find_device(scanner_cls: Any, config: BleConfig, stdout: TextIO) -> DeviceChoice:
+async def find_device(
+    scanner_cls: Any,
+    config: BleConfig,
+    stdout: TextIO,
+    device_cls: Any | None = None,
+    paired_address_resolver: Callable[[str, str], Any] | None = None,
+) -> DeviceChoice:
+    if config.address and device_cls:
+        log(stdout, f"Using direct BLE address {config.address}; skipping scan")
+        return DeviceChoice(
+            device_cls(config.address, config.device_name, details=None),
+            config.address,
+            config.device_name,
+            False,
+        )
+
     log(stdout, f"Scanning for {config.device_name!r} service={SERVICE_UUID} timeout={config.scan_timeout:.1f}s")
     discovered = await scanner_cls.discover(timeout=config.scan_timeout, return_adv=True)
     choice = select_device(discovered, config.device_name, SERVICE_UUID, config.address)
     if not choice:
+        resolver = paired_address_resolver or resolve_paired_windows_ble_address
+        paired_address = await maybe_await(resolver(config.device_name, SERVICE_UUID)) if device_cls else None
+        if paired_address:
+            log(stdout, f"Found paired Windows BLE address {paired_address}; connecting directly")
+            return DeviceChoice(
+                device_cls(paired_address, config.device_name, details=None),
+                paired_address,
+                config.device_name,
+                False,
+            )
         raise RuntimeError(f"BLE device not found: {config.device_name}")
     service_note = "service match" if choice.service_match else "name/address match"
     log(stdout, f"Selected {choice.name or '-'} at {choice.address or '-'} ({service_note})")
@@ -322,9 +526,11 @@ async def run_ble_session(
     stdout: TextIO,
     scanner_cls: Any,
     client_cls: Any,
+    device_cls: Any | None = None,
+    paired_address_resolver: Callable[[str, str], Any] | None = None,
 ) -> bool:
-    choice = await find_device(scanner_cls, config, stdout)
-    target = choice.device if not config.address else config.address
+    choice = await find_device(scanner_cls, config, stdout, device_cls, paired_address_resolver)
+    target = choice.device
     state = NotificationState()
 
     def disconnected_callback(client: Any) -> None:
@@ -363,10 +569,20 @@ async def run_ble_with_retries(
     scanner_cls: Any,
     client_cls: Any,
     retry_delay: float,
+    device_cls: Any | None = None,
+    paired_address_resolver: Callable[[str, str], Any] | None = None,
 ) -> int:
     while True:
         try:
-            ok = await run_ble_session(config, payload_provider, stdout, scanner_cls, client_cls)
+            ok = await run_ble_session(
+                config,
+                payload_provider,
+                stdout,
+                scanner_cls,
+                client_cls,
+                device_cls,
+                paired_address_resolver,
+            )
             if ok:
                 return 0
             if not config.watch:
@@ -381,17 +597,31 @@ async def run_ble_with_retries(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Send Claude usage to the Xingzhi BLE GATT RX characteristic.")
+    parser = argparse.ArgumentParser(description="Send usage data to the Xingzhi BLE GATT RX characteristic.")
     parser.add_argument("--device-name", default=DEVICE_NAME, help="Advertised BLE device name")
     parser.add_argument("--address", help="Optional BLE address to connect to instead of name/service selection")
     parser.add_argument("--scan-timeout", type=float, default=10.0, help="Seconds to scan for the device")
-    parser.add_argument("--poll-interval", type=float, default=60.0, help="Seconds between Claude usage polls in --watch mode")
+    parser.add_argument("--poll-interval", type=float, default=60.0, help="Seconds between usage polls in --watch mode")
     parser.add_argument("--retry-delay", type=float, default=5.0, help="Seconds before reconnect retry in --watch mode")
     parser.add_argument("--ack-timeout", type=float, default=3.0, help="Seconds to wait for TX ack/nack notification")
     parser.add_argument("--require-ack", action="store_true", help="Treat missing TX ack as a failed send")
     parser.add_argument("--watch", action="store_true", help="Keep running and poll repeatedly")
+    parser.add_argument(
+        "--usage-source",
+        choices=["claude", "codex-wsl"],
+        default="codex-wsl",
+        help="Usage data source when --test-preset is not set (default: codex-wsl)",
+    )
     parser.add_argument("--test-preset", choices=sorted(PRESETS), help="Send a fixed payload instead of polling Claude")
     parser.add_argument("--credentials", type=Path, default=DEFAULT_CREDENTIALS, help="Claude credentials JSON path")
+    parser.add_argument("--codex-home", type=Path, help="Codex home path for --usage-source codex-wsl")
+    parser.add_argument("--codex-wsl-distro", help="WSL distro to query when auto-detecting Codex home on Windows")
+    parser.add_argument(
+        "--codex-max-session-files",
+        type=int,
+        default=DEFAULT_CODEX_SESSION_FILE_LIMIT,
+        help="Maximum recent Codex session JSONL files to scan",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Print the payload without scanning or connecting")
     return parser
 
@@ -409,7 +639,16 @@ def run(
     def payload_provider() -> str:
         if args.test_preset:
             return build_preset_payload(args.test_preset)
-        return poll_claude_usage(args.credentials, opener=opener, now_fn=now_fn)
+        if args.usage_source == "claude":
+            return poll_claude_usage(args.credentials, opener=opener, now_fn=now_fn)
+        if args.usage_source == "codex-wsl":
+            return poll_codex_wsl_usage(
+                args.codex_home.expanduser() if args.codex_home else None,
+                now_fn=now_fn,
+                max_session_files=args.codex_max_session_files,
+                wsl_distro=args.codex_wsl_distro,
+            )
+        raise ValueError(f"Unknown usage source: {args.usage_source}")
 
     try:
         first_payload = payload_provider()
@@ -422,10 +661,11 @@ def run(
         return 0
 
     try:
-        scanner_cls, client_cls = bleak_loader()
+        loaded_bleak = bleak_loader()
     except MissingBleakError as exc:
         print(f"Error: {exc}", file=stderr)
         return 1
+    scanner_cls, client_cls, device_cls = (*loaded_bleak, None)[:3]
 
     config = BleConfig(
         device_name=args.device_name,
@@ -445,7 +685,17 @@ def run(
             return payload
         return payload_provider()
 
-    return asyncio.run(run_ble_with_retries(config, cached_payload_provider, stdout, scanner_cls, client_cls, args.retry_delay))
+    return asyncio.run(
+        run_ble_with_retries(
+            config,
+            cached_payload_provider,
+            stdout,
+            scanner_cls,
+            client_cls,
+            args.retry_delay,
+            device_cls,
+        )
+    )
 
 
 def main() -> int:
