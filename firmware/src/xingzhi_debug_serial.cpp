@@ -91,6 +91,10 @@ XingzhiDebugCommand xingzhi_debug_parse_command(const char *line) {
         command.type = XingzhiDebugCommandType::Ble;
         read_token(&cursor, command.arg1, sizeof(command.arg1));
         read_token(&cursor, command.arg2, sizeof(command.arg2));
+    } else if (token_equals(token, "PROBE")) {
+        command.type = XingzhiDebugCommandType::Probe;
+        read_token(&cursor, command.arg1, sizeof(command.arg1));
+        read_token(&cursor, command.arg2, sizeof(command.arg2));
     } else {
         command.type = XingzhiDebugCommandType::Unknown;
     }
@@ -145,6 +149,35 @@ int xingzhi_debug_format_status(const XingzhiDebugStatus *status, char *buf, siz
         splash_group,
         splash_category,
         safe_value(status->splash_frame)
+    );
+}
+
+int xingzhi_debug_format_probe(const XingzhiDebugProbeResult *result, char *buf, size_t len) {
+    if (!result || !buf || len == 0) {
+        return 0;
+    }
+
+    char probe[32];
+    char status[32];
+    char method[40];
+    char detail[56];
+    char checked[40];
+    sanitize_value(result->probe, probe, sizeof(probe));
+    sanitize_value(result->status, status, sizeof(status));
+    sanitize_value(result->method, method, sizeof(method));
+    sanitize_value(result->detail, detail, sizeof(detail));
+    sanitize_value(result->checked, checked, sizeof(checked));
+    return snprintf(
+        buf,
+        len,
+        "XDBG PROBE target=%s probe=%s ok=%d status=%s method=%s detail=%s checked=%s",
+        safe_value(result->target),
+        probe,
+        result->ok ? 1 : 0,
+        status,
+        method,
+        detail,
+        checked
     );
 }
 

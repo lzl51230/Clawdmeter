@@ -31,6 +31,10 @@ void test_debug_command_parser_accepts_known_commands() {
     command = xingzhi_debug_parse_command("XDBG BLE reset");
     TEST_ASSERT_EQUAL(XingzhiDebugCommandType::Ble, command.type);
     TEST_ASSERT_EQUAL_STRING("reset", command.arg1);
+
+    command = xingzhi_debug_parse_command("XDBG PROBE imu");
+    TEST_ASSERT_EQUAL(XingzhiDebugCommandType::Probe, command.type);
+    TEST_ASSERT_EQUAL_STRING("imu", command.arg1);
 }
 
 void test_debug_command_parser_reports_unknown_commands() {
@@ -98,6 +102,31 @@ void test_screenshot_start_line_contains_frame_metadata() {
     );
 }
 
+void test_probe_line_is_bounded_and_parseable() {
+    XingzhiDebugProbeResult result = {};
+    result.target = "xingzhi_parity";
+    result.probe = "imu";
+    result.ok = true;
+    result.status = "not available";
+    result.method = "xiaozhi board config";
+    result.detail = "no i2c or imu config";
+    result.checked = "qmi8658_0x6b";
+
+    char line[192];
+    int written = xingzhi_debug_format_probe(&result, line, sizeof(line));
+
+    TEST_ASSERT_GREATER_THAN(0, written);
+    TEST_ASSERT_LESS_THAN(sizeof(line), static_cast<size_t>(written));
+    TEST_ASSERT_NOT_NULL(strstr(line, "XDBG PROBE"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "target=xingzhi_parity"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "probe=imu"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "ok=1"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "status=not_available"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "method=xiaozhi_board_config"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "detail=no_i2c_or_imu_config"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "checked=qmi8658_0x6b"));
+}
+
 int main(int argc, char **argv) {
     UNITY_BEGIN();
     RUN_TEST(test_usage_payload_detection_uses_json_prefix);
@@ -105,5 +134,6 @@ int main(int argc, char **argv) {
     RUN_TEST(test_debug_command_parser_reports_unknown_commands);
     RUN_TEST(test_status_line_is_bounded_and_parseable);
     RUN_TEST(test_screenshot_start_line_contains_frame_metadata);
+    RUN_TEST(test_probe_line_is_bounded_and_parseable);
     return UNITY_END();
 }

@@ -123,6 +123,15 @@ def read_ble_response(serial_port) -> dict[str, str]:
             raise RuntimeError(line)
 
 
+def read_probe_response(serial_port) -> dict[str, str]:
+    while True:
+        line = read_line_text(serial_port)
+        if line.startswith("XDBG PROBE "):
+            return parse_key_values(line)
+        if line.startswith("XDBG ERROR "):
+            raise RuntimeError(line)
+
+
 def read_exact(serial_port, byte_count: int) -> bytes:
     chunks: list[bytes] = []
     remaining = byte_count
@@ -257,6 +266,13 @@ def build_parser() -> argparse.ArgumentParser:
     payload.add_argument("--timeout", type=float, default=3.0, help="Serial read timeout in seconds")
     payload.add_argument("--settle-delay", type=float, default=0.4, help="Delay after opening the port")
 
+    probe = subcommands.add_parser("probe", help="Probe optional hardware capabilities")
+    probe.add_argument("target", nargs="?", default="imu", help="Probe target, currently imu")
+    probe.add_argument("--port", default=DEFAULT_PORT, help="Serial port, for example COM7")
+    probe.add_argument("--baud", type=int, default=DEFAULT_BAUD, help="Serial baud rate")
+    probe.add_argument("--timeout", type=float, default=3.0, help="Serial read timeout in seconds")
+    probe.add_argument("--settle-delay", type=float, default=0.4, help="Delay after opening the port")
+
     return parser
 
 
@@ -299,6 +315,13 @@ def run(
                 line = args.json.rstrip("\r\n") + "\n"
                 write_command(serial_port, line.encode("utf-8"))
                 print("sent=1", file=stdout)
+                return 0
+
+            if args.command == "probe":
+                write_command(serial_port, f"XDBG PROBE {args.target}\n".encode("ascii"))
+                result = read_probe_response(serial_port)
+                for key in sorted(result):
+                    print(f"{key}={result[key]}", file=stdout)
                 return 0
 
             write_command(serial_port, SCREENSHOT_COMMAND)

@@ -9,6 +9,7 @@ enum class XingzhiDebugCommandType {
     Screenshot,
     Button,
     Ble,
+    Probe,
     Unknown,
 };
 
@@ -49,9 +50,20 @@ struct XingzhiDebugStatus {
     const char *splash_frame = "";
 };
 
+struct XingzhiDebugProbeResult {
+    const char *target = "";
+    const char *probe = "";
+    bool ok = false;
+    const char *status = "";
+    const char *method = "";
+    const char *detail = "";
+    const char *checked = "";
+};
+
 bool xingzhi_debug_is_usage_payload(const char *line);
 XingzhiDebugCommand xingzhi_debug_parse_command(const char *line);
 int xingzhi_debug_format_status(const XingzhiDebugStatus *status, char *buf, size_t len);
+int xingzhi_debug_format_probe(const XingzhiDebugProbeResult *result, char *buf, size_t len);
 int xingzhi_debug_format_screenshot_start(
     int width,
     int height,

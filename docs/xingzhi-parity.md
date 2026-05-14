@@ -19,6 +19,11 @@
 - 2026-05-14，Xingzhi 1.54 WiFi 通过 USB 连接 Windows/WSL 调试机供电时，串口 `status` 稳定报告 `power=valid`、`samples=3`、`adc=2443/2443` 到 `2444/2444`、`battery=100`、`charging=1`。
 - 当前未改动 ADC 分段校准，仍使用小智来源的 1970/2062/2154/2246/2338/2430 分段作为初始基线。U6 仅将 `valid` 电量同步到 BLE HID battery；`sampling`、`unavailable` 或 `error` 不发布新的 HID 电量。
 
+## IMU 探测记录
+
+- 2026-05-14，对比本地 `xiaozhi-esp32/main/boards/xingzhi-cube-1.54tft-wifi/` 后，未发现该板的 I2C、IMU、QMI8658、MPU 或 Wire 配置；原版 Clawdmeter 的 Waveshare 目标使用 QMI8658 `0x6b`，但不能直接套用到 Xingzhi。
+- 2026-05-14，串口执行 `tools\xingzhi_debug.py probe imu --port COM7` 返回 `status=not_available`、`method=xiaozhi_board_config`、`detail=no_i2c_or_imu_config`、`checked=qmi8658_0x6b`。因此自动旋转在当前 Xingzhi 1.54 WiFi 硬件上记录为不适用，不阻塞其他功能移植。
+
 ## 构建与刷写
 
 ```powershell

@@ -200,6 +200,44 @@ class XingzhiDebugToolTest(unittest.TestCase):
         self.assertEqual(serial_port.writes[0], b'{"s":42,"w":18,"st":"allowed","ok":true}\n')
         self.assertIn("sent=1", stdout.getvalue())
 
+    def test_read_probe_response_extracts_result(self):
+        serial_port = FakeSerial("COM9", 115200)
+        serial_port.read_buffer.extend(
+            b"booting\n"
+            b"XDBG PROBE target=xingzhi_parity probe=imu ok=1 "
+            b"status=not_available method=xiaozhi_board_config "
+            b"detail=no_i2c_or_imu_config checked=qmi8658_0x6b\n"
+        )
+
+        result = xingzhi_debug.read_probe_response(serial_port)
+
+        self.assertEqual(result["target"], "xingzhi_parity")
+        self.assertEqual(result["probe"], "imu")
+        self.assertEqual(result["ok"], "1")
+        self.assertEqual(result["status"], "not_available")
+        self.assertEqual(result["checked"], "qmi8658_0x6b")
+
+    def test_probe_command_writes_probe_request(self):
+        serial_port = FakeSerial("COM9", 115200)
+        serial_port.read_buffer.extend(
+            b"XDBG PROBE target=xingzhi_parity probe=imu ok=1 "
+            b"status=not_available method=xiaozhi_board_config "
+            b"detail=no_i2c_or_imu_config checked=qmi8658_0x6b\n"
+        )
+        stdout = io.StringIO()
+
+        code = xingzhi_debug.run(
+            ["probe", "imu", "--port", "COM9"],
+            stdout=stdout,
+            stderr=io.StringIO(),
+            serial_factory=lambda *args, **kwargs: serial_port,
+            sleep_fn=lambda _: None,
+        )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(serial_port.writes[0], b"XDBG PROBE imu\n")
+        self.assertIn("status=not_available", stdout.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

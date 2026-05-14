@@ -222,6 +222,20 @@ void send_ble_result(const char *subcommand, bool ok, const char *message) {
     );
 }
 
+void send_probe_result() {
+    char line[192];
+    XingzhiDebugProbeResult result = {};
+    result.target = "xingzhi_parity";
+    result.probe = "imu";
+    result.ok = true;
+    result.status = "not_available";
+    result.method = "xiaozhi_board_config";
+    result.detail = "no_i2c_or_imu_config";
+    result.checked = "qmi8658_0x6b";
+    xingzhi_debug_format_probe(&result, line, sizeof(line));
+    Serial.println(line);
+}
+
 bool send_hid_press(XingzhiAction action) {
     if (action == XingzhiAction::HidSpace) {
         return xingzhi_ble_keyboard_press(HID_KEY_SPACE, 0);
@@ -494,6 +508,14 @@ void handle_ble_command(const XingzhiDebugCommand &command) {
     send_ble_result(command.arg1, ok, ok ? "pairing_reset" : xingzhi_ble_last_error());
 }
 
+void handle_probe_command(const XingzhiDebugCommand &command) {
+    if (command.arg1[0] != '\0' && strcmp(command.arg1, "imu") != 0) {
+        send_debug_error("unknown_probe", command.arg1);
+        return;
+    }
+    send_probe_result();
+}
+
 void handle_physical_button_event(const XingzhiButtonEvent &button_event) {
     if (!button_event.active) {
         return;
@@ -534,6 +556,9 @@ void handle_debug_line(const char *line) {
         break;
     case XingzhiDebugCommandType::Ble:
         handle_ble_command(command);
+        break;
+    case XingzhiDebugCommandType::Probe:
+        handle_probe_command(command);
         break;
     case XingzhiDebugCommandType::None:
         break;
@@ -612,7 +637,7 @@ void log_config() {
     Serial.println("Xingzhi parity firmware");
     Serial.printf("Panel: ST7789 %dx%d\n", DISPLAY_WIDTH, DISPLAY_HEIGHT);
     Serial.println("Payload: newline-delimited JSON on USB serial");
-    Serial.println("Debug: XDBG STATUS, XDBG SCREENSHOT");
+    Serial.println("Debug: XDBG STATUS, XDBG SCREENSHOT, XDBG PROBE imu");
     Serial.println("Buttons: GPIO0 cycle, GPIO40 Space, GPIO39 Shift+Tab");
 }
 
