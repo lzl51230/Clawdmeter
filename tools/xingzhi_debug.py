@@ -242,6 +242,13 @@ def build_parser() -> argparse.ArgumentParser:
     ble.add_argument("--timeout", type=float, default=3.0, help="Serial read timeout in seconds")
     ble.add_argument("--settle-delay", type=float, default=0.4, help="Delay after opening the port")
 
+    payload = subcommands.add_parser("payload", help="Send one newline-delimited usage JSON payload")
+    payload.add_argument("json", help='Usage JSON, for example {"s":42,"w":18,"st":"allowed","ok":true}')
+    payload.add_argument("--port", default=DEFAULT_PORT, help="Serial port, for example COM7")
+    payload.add_argument("--baud", type=int, default=DEFAULT_BAUD, help="Serial baud rate")
+    payload.add_argument("--timeout", type=float, default=3.0, help="Serial read timeout in seconds")
+    payload.add_argument("--settle-delay", type=float, default=0.4, help="Delay after opening the port")
+
     return parser
 
 
@@ -278,6 +285,12 @@ def run(
                 result = read_ble_response(serial_port)
                 for key in sorted(result):
                     print(f"{key}={result[key]}", file=stdout)
+                return 0
+
+            if args.command == "payload":
+                line = args.json.rstrip("\r\n") + "\n"
+                write_command(serial_port, line.encode("utf-8"))
+                print("sent=1", file=stdout)
                 return 0
 
             write_command(serial_port, SCREENSHOT_COMMAND)

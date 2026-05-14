@@ -167,6 +167,22 @@ class XingzhiDebugToolTest(unittest.TestCase):
         self.assertEqual(serial_port.writes[0], b"XDBG BLE reset\n")
         self.assertIn("message=pairing_reset", stdout.getvalue())
 
+    def test_payload_command_writes_json_line(self):
+        serial_port = FakeSerial("COM9", 115200)
+        stdout = io.StringIO()
+
+        code = xingzhi_debug.run(
+            ["payload", '{"s":42,"w":18,"st":"allowed","ok":true}', "--port", "COM9"],
+            stdout=stdout,
+            stderr=io.StringIO(),
+            serial_factory=lambda *args, **kwargs: serial_port,
+            sleep_fn=lambda _: None,
+        )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(serial_port.writes[0], b'{"s":42,"w":18,"st":"allowed","ok":true}\n')
+        self.assertIn("sent=1", stdout.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

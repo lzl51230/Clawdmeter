@@ -1,5 +1,8 @@
 #include "usage_rate.h"
+
+#ifdef ARDUINO
 #include <Arduino.h>
+#endif
 
 // Thresholds in %/min. A 5-hour (300 min) session ÷ 100% = 0.33 %/min to fill
 // exactly at the same pace as the session itself resets — the user wants the
@@ -29,18 +32,30 @@ static Sample ring[RING_SIZE];
 static uint8_t count = 0;
 static uint8_t head  = 0;  // index of next write slot
 
+static uint32_t default_now_ms(void) {
+#ifdef ARDUINO
+    return millis();
+#else
+    return 0;
+#endif
+}
+
+static UsageRateNowFn usage_rate_now = default_now_ms;
+
 static inline uint8_t oldest_idx(void) {
     return (head + RING_SIZE - count) % RING_SIZE;
 }
 
-static void usage_rate_reset(void) {
+void usage_rate_reset(void) {
     count = 0;
     head  = 0;
 }
 
-void usage_rate_sample(float session_pct) {
-    uint32_t now = millis();
+void usage_rate_set_now_fn(UsageRateNowFn now_fn) {
+    usage_rate_now = now_fn ? now_fn : default_now_ms;
+}
 
+void usage_rate_sample_at(float session_pct, uint32_t now_ms) {
     if (count > 0) {
         uint8_t latest = (head + RING_SIZE - 1) % RING_SIZE;
         // Session reset: pct dropped substantially. Restart tracking.
@@ -49,9 +64,13 @@ void usage_rate_sample(float session_pct) {
         }
     }
 
-    ring[head] = { now, session_pct };
+    ring[head] = { now_ms, session_pct };
     head = (head + 1) % RING_SIZE;
     if (count < RING_SIZE) count++;
+}
+
+void usage_rate_sample(float session_pct) {
+    usage_rate_sample_at(session_pct, usage_rate_now());
 }
 
 int usage_rate_group(void) {
@@ -70,4 +89,18 @@ int usage_rate_group(void) {
     if (rate < RATE_THRESH_ACTIVE) return 1;
     if (rate < RATE_THRESH_HEAVY)  return 2;
     return 3;
+}
+
+const char *usage_rate_group_name(int group) {
+    switch (group) {
+    case 1:
+        return "normal";
+    case 2:
+        return "active";
+    case 3:
+        return "heavy";
+    case 0:
+    default:
+        return "idle";
+    }
 }

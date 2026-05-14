@@ -2,6 +2,7 @@
 #include <Arduino_GFX_Library.h>
 #include <string.h>
 
+#include "usage_rate.h"
 #include "usage_input.h"
 #include "xingzhi_app_actions.h"
 #include "xingzhi_ble.h"
@@ -181,6 +182,7 @@ void send_status() {
     status.action_count = action_state.action_count;
     status.action_error = action_state.last_error[0] ? action_state.last_error : xingzhi_ble_last_error();
     status.splash = splash.valid ? splash.name : "-";
+    status.splash_group = splash.valid ? splash.group_name : "-";
     status.splash_category = splash.valid ? splash.category : "-";
     status.splash_frame = splash_frame;
     xingzhi_debug_format_status(&status, line, sizeof(line));
@@ -290,6 +292,21 @@ void send_screenshot() {
     Serial.print("\nXDBG SCREENSHOT_END\n");
 }
 
+void sample_usage_rate(float session_pct) {
+    const int before = usage_rate_group();
+    usage_rate_sample(session_pct);
+    const int after = usage_rate_group();
+    if (after != before) {
+        Serial.printf(
+            "Usage rate group: %s -> %s (session=%.2f%%)\n",
+            usage_rate_group_name(before),
+            usage_rate_group_name(after),
+            session_pct
+        );
+    }
+    xingzhi_splash_anim_set_group(&splash_anim, after, millis());
+}
+
 void handle_payload_line(const char *line) {
     UsageData parsed = {};
     UsageParseResult result = parse_usage_payload(line, &parsed);
@@ -300,6 +317,7 @@ void handle_payload_line(const char *line) {
         payload_state = MeterPayloadState::Valid;
         last_payload_source = "serial";
         set_detail(parsed.status);
+        sample_usage_rate(parsed.session_pct);
         Serial.printf(
             "Usage update: session=%.1f weekly=%.1f status=%s\n",
             usage.session_pct,
@@ -337,6 +355,7 @@ void handle_ble_payload_line(const char *line) {
         payload_state = MeterPayloadState::Valid;
         last_payload_source = "ble";
         set_detail(parsed.status);
+        sample_usage_rate(parsed.session_pct);
         snprintf(last_ble_detail, sizeof(last_ble_detail), "rx ok");
         xingzhi_ble_send_ack();
         Serial.printf(
@@ -562,7 +581,9 @@ void poll_splash(uint32_t now_ms) {
     if (action_state.current_screen != XingzhiScreen::Splash) {
         return;
     }
-    if (xingzhi_splash_anim_tick(&splash_anim, now_ms)) {
+    const bool rotated = xingzhi_splash_anim_rotate_if_due(&splash_anim, now_ms);
+    const bool advanced = xingzhi_splash_anim_tick(&splash_anim, now_ms);
+    if (rotated || advanced) {
         draw_meter();
     }
 }
@@ -588,6 +609,7 @@ void setup() {
     usage.weekly_reset_mins = -1;
     usage.ok = false;
     usage.valid = false;
+    usage_rate_reset();
     xingzhi_actions_init(&action_state);
     xingzhi_splash_anim_init(&splash_anim, millis());
     xingzhi_buttons_begin();

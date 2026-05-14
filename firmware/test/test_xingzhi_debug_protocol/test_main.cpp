@@ -55,6 +55,7 @@ void test_status_line_is_bounded_and_parseable() {
     status.framebuffer = "ready";
     status.detail = "allowed";
     status.splash = "idle breathe";
+    status.splash_group = "idle";
     status.splash_category = "Idle";
     status.splash_frame = "0/16";
 
@@ -74,6 +75,7 @@ void test_status_line_is_bounded_and_parseable() {
     TEST_ASSERT_NOT_NULL(strstr(line, "power=valid"));
     TEST_ASSERT_NOT_NULL(strstr(line, "battery=80"));
     TEST_ASSERT_NOT_NULL(strstr(line, "splash=idle_breathe"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "splash_group=idle"));
     TEST_ASSERT_NOT_NULL(strstr(line, "splash_category=Idle"));
     TEST_ASSERT_NOT_NULL(strstr(line, "splash_frame=0/16"));
 }
