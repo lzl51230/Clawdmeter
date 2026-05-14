@@ -64,6 +64,29 @@ void test_cycle_long_press_exits_splash() {
     TEST_ASSERT_EQUAL(XingzhiScreen::Status, state.current_screen);
 }
 
+void test_cycle_after_splash_exit_continues_to_usage() {
+    XingzhiActionState state = {};
+    xingzhi_actions_init(&state);
+    xingzhi_actions_dispatch(&state, XingzhiAction::CycleScreen, XingzhiActionEvent::Click);
+    TEST_ASSERT_EQUAL(XingzhiScreen::Status, state.current_screen);
+    xingzhi_actions_dispatch(&state, XingzhiAction::CycleScreen, XingzhiActionEvent::Click);
+    TEST_ASSERT_EQUAL(XingzhiScreen::Splash, state.current_screen);
+    xingzhi_actions_dispatch(&state, XingzhiAction::CycleScreen, XingzhiActionEvent::Click);
+    TEST_ASSERT_EQUAL(XingzhiScreen::Splash, state.current_screen);
+    xingzhi_actions_dispatch(&state, XingzhiAction::CycleScreen, XingzhiActionEvent::LongPress);
+    TEST_ASSERT_EQUAL(XingzhiScreen::Status, state.current_screen);
+
+    XingzhiActionResult result = xingzhi_actions_dispatch(
+        &state,
+        XingzhiAction::CycleScreen,
+        XingzhiActionEvent::Click
+    );
+
+    TEST_ASSERT_TRUE(result.ok);
+    TEST_ASSERT_EQUAL_STRING("screen_changed", result.message);
+    TEST_ASSERT_EQUAL(XingzhiScreen::Usage, state.current_screen);
+}
+
 void test_exit_splash_outside_splash_reports_error() {
     XingzhiActionState state = {};
     xingzhi_actions_init(&state);
@@ -209,6 +232,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_cycle_click_enters_splash_then_advances_animation);
     RUN_TEST(test_splash_exit_returns_to_previous_non_splash_screen);
     RUN_TEST(test_cycle_long_press_exits_splash);
+    RUN_TEST(test_cycle_after_splash_exit_continues_to_usage);
     RUN_TEST(test_exit_splash_outside_splash_reports_error);
     RUN_TEST(test_hid_space_press_release_balances_intent);
     RUN_TEST(test_shift_tab_click_records_action_without_changing_screen);

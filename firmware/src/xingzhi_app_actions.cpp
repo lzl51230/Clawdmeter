@@ -21,6 +21,32 @@ XingzhiScreen exit_target(const XingzhiActionState *state) {
     return state->previous_screen;
 }
 
+XingzhiScreen next_cycle_screen(XingzhiActionState *state) {
+    if (!state) {
+        return XingzhiScreen::Usage;
+    }
+    if (state->splash_exit_pending_cycle) {
+        const bool should_skip_splash = state->current_screen == XingzhiScreen::Status;
+        state->splash_exit_pending_cycle = false;
+        if (should_skip_splash) {
+            return XingzhiScreen::Usage;
+        }
+    }
+    return next_screen(state->current_screen);
+}
+
+void advance_cycle_screen(XingzhiActionState *state) {
+    const XingzhiScreen before = state->current_screen;
+    state->current_screen = next_cycle_screen(state);
+    state->previous_screen = state->current_screen == XingzhiScreen::Splash ? before : state->current_screen;
+}
+
+void exit_splash(XingzhiActionState *state) {
+    state->current_screen = exit_target(state);
+    state->previous_screen = state->current_screen;
+    state->splash_exit_pending_cycle = state->current_screen == XingzhiScreen::Status;
+}
+
 bool is_pressed(const XingzhiActionState *state, XingzhiAction action) {
     if (!state) {
         return false;
@@ -105,20 +131,15 @@ XingzhiActionResult xingzhi_actions_dispatch(
                 result.splash_next = true;
                 return result;
             }
-            const XingzhiScreen before = state->current_screen;
-            state->current_screen = next_screen(state->current_screen);
-            state->previous_screen = state->current_screen == XingzhiScreen::Splash ? before : state->current_screen;
+            advance_cycle_screen(state);
             return record_success(state, action, event, "screen_changed");
         }
         if (event == XingzhiActionEvent::LongPress) {
             if (state->current_screen == XingzhiScreen::Splash) {
-                state->current_screen = exit_target(state);
-                state->previous_screen = state->current_screen;
+                exit_splash(state);
                 return record_success(state, action, event, "splash_exit");
             }
-            const XingzhiScreen before = state->current_screen;
-            state->current_screen = next_screen(state->current_screen);
-            state->previous_screen = state->current_screen == XingzhiScreen::Splash ? before : state->current_screen;
+            advance_cycle_screen(state);
             return record_success(state, action, event, "screen_changed");
         }
         return record_success(state, action, event, "cycle_event_recorded");
@@ -128,8 +149,7 @@ XingzhiActionResult xingzhi_actions_dispatch(
         if (state->current_screen != XingzhiScreen::Splash) {
             return record_error(state, "not_on_splash");
         }
-        state->current_screen = exit_target(state);
-        state->previous_screen = state->current_screen;
+        exit_splash(state);
         return record_success(state, action, event, "splash_exit");
     }
 

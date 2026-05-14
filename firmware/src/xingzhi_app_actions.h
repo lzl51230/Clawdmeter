@@ -31,6 +31,7 @@ struct XingzhiActionState {
     uint32_t action_count = 0;
     bool space_pressed = false;
     bool shift_tab_pressed = false;
+    bool splash_exit_pending_cycle = false;
     const char *last_error = "";
 };
 
