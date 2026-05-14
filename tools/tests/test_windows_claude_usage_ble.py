@@ -63,6 +63,29 @@ class FakeClient:
             callback(ble_tool.TX_CHAR_UUID, b'{"ack":true}')
 
 
+class NackClient(FakeClient):
+    async def write_gatt_char(self, uuid, data, response=True):
+        self.writes.append((uuid, data, response))
+        callback = self.notify_handlers.get(ble_tool.TX_CHAR_UUID)
+        if callback:
+            callback(ble_tool.TX_CHAR_UUID, b'{"err":true}')
+
+
+class NackThenAckClient(FakeClient):
+    attempts = 0
+
+    async def write_gatt_char(self, uuid, data, response=True):
+        self.writes.append((uuid, data, response))
+        callback = self.notify_handlers.get(ble_tool.TX_CHAR_UUID)
+        if not callback:
+            return
+        NackThenAckClient.attempts += 1
+        if NackThenAckClient.attempts == 1:
+            callback(ble_tool.TX_CHAR_UUID, b'{"err":true}')
+        else:
+            callback(ble_tool.TX_CHAR_UUID, b'{"ack":true}')
+
+
 class FakeResponse:
     def __init__(self, headers):
         self.headers = headers
@@ -77,6 +100,7 @@ class FakeResponse:
 class WindowsClaudeUsageBleTest(unittest.TestCase):
     def setUp(self):
         FakeClient.instances = []
+        NackThenAckClient.attempts = 0
         FakeScanner.discovered = {
             "AA": (
                 FakeDevice("AA:AA:AA:AA:AA:AA", "Claude Controller"),
@@ -215,6 +239,55 @@ class WindowsClaudeUsageBleTest(unittest.TestCase):
 
         self.assertTrue(ok)
         self.assertEqual(len(FakeClient.instances[0].writes), 2)
+
+    def test_one_shot_nack_returns_failure(self):
+        FakeScanner.discovered = {
+            "BB": (
+                FakeDevice("BB:BB:BB:BB:BB:BB", "Claude Controller"),
+                FakeAdvertisement(local_name="Claude Controller", service_uuids=[ble_tool.SERVICE_UUID]),
+            )
+        }
+        stdout = io.StringIO()
+        config = ble_tool.BleConfig(require_ack=True, ack_timeout=0.1)
+
+        code = asyncio.run(
+            ble_tool.run_ble_with_retries(
+                config,
+                lambda: ble_tool.build_preset_payload("normal"),
+                stdout,
+                FakeScanner,
+                NackClient,
+                retry_delay=0,
+            )
+        )
+
+        self.assertEqual(code, 1)
+        self.assertIn("Device rejected payload", stdout.getvalue())
+
+    def test_watch_nack_reconnects_and_retries(self):
+        FakeScanner.discovered = {
+            "BB": (
+                FakeDevice("BB:BB:BB:BB:BB:BB", "Claude Controller"),
+                FakeAdvertisement(local_name="Claude Controller", service_uuids=[ble_tool.SERVICE_UUID]),
+            )
+        }
+        stdout = io.StringIO()
+        config = ble_tool.BleConfig(watch=True, require_ack=True, max_writes=1, ack_timeout=0.1)
+
+        code = asyncio.run(
+            ble_tool.run_ble_with_retries(
+                config,
+                lambda: ble_tool.build_preset_payload("normal"),
+                stdout,
+                FakeScanner,
+                NackThenAckClient,
+                retry_delay=0,
+            )
+        )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(len(FakeClient.instances), 2)
+        self.assertIn("BLE send failed; retrying", stdout.getvalue())
 
 
 if __name__ == "__main__":

@@ -366,13 +366,18 @@ async def run_ble_with_retries(
 ) -> int:
     while True:
         try:
-            return 0 if await run_ble_session(config, payload_provider, stdout, scanner_cls, client_cls) else 1
+            ok = await run_ble_session(config, payload_provider, stdout, scanner_cls, client_cls)
+            if ok:
+                return 0
+            if not config.watch:
+                return 1
+            log(stdout, f"BLE send failed; retrying in {retry_delay:.1f}s")
         except Exception as exc:
             log(stdout, f"BLE error: {exc}")
             if not config.watch:
                 return 1
             log(stdout, f"Retrying in {retry_delay:.1f}s")
-            await asyncio.sleep(retry_delay)
+        await asyncio.sleep(retry_delay)
 
 
 def build_parser() -> argparse.ArgumentParser:

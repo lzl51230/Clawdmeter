@@ -5,7 +5,7 @@
 ## 当前能力
 
 - USB 串口 JSON fallback：兼容 `tools/send_test_payload.py`。
-- 串口调试：`tools/xingzhi_debug.py status|screenshot|button`。
+- 串口调试：`tools/xingzhi_debug.py status|screenshot|button|ble`。
 - 240x240 framebuffer 截图：RGB565LE framed binary，可转 `.bmp` 或 `.ppm`。
 - 三屏 UI：usage、status、splash，通过 `button cycle --event click` 切换。
 - 动作分发器：`cycle`、`space`、`shift_tab` 可由串口模拟、实体按键和 BLE HID 共用。
@@ -47,6 +47,12 @@ U6 通过标准：串口模拟 `cycle` 后状态切屏；模拟 `space`/`shift_t
 
 U7 通过标准：启动约 5 秒后连续查询 `status`，状态显示 `power=valid`、`samples=3`、`adc=<avg>/<raw>`、`battery=<0-100>` 和 `charging=0|1`；status 屏截图显示 battery 行。当前 USB 供电实测 ADC 约 2447-2449，显示 `battery=100`、`charging=1`。
 
+## Phase 2 验证闸门
+
+U1 BLE 恢复入口通过标准：执行 `py -3 tools\xingzhi_debug.py ble reset --port COM7` 返回 `ok=1`、`message=pairing_reset`，随后 `status` 显示 `screen=status`、`ble=advertising`、`framebuffer=ready`，截图可见 status 屏恢复结果。若 Windows 仍持有旧 GATT 缓存，先在 Windows 蓝牙设备中移除 `Claude Controller` 后重新连接。
+
+U2 Windows watch 通过标准：执行 `py -3 -u tools\windows_claude_usage_ble.py --test-preset high --require-ack --watch --poll-interval 3 --retry-delay 1` 时，扫描、连接、通知或发送失败会记录日志并重试；成功写入后串口 `status` 显示 `source=ble`、`payload=valid`、`detail=limited`，status 屏截图显示 connected BLE 状态。一次性发送模式遇到 nack 或必需 ack 超时仍返回失败。
+
 ## Windows BLE 用量发送
 
 ```powershell
@@ -56,7 +62,7 @@ py -3 tools\windows_claude_usage_ble.py --dry-run
 py -3 tools\windows_claude_usage_ble.py --watch
 ```
 
-`--test-preset` 不访问 Claude API，适合先验证 BLE。真实用量模式读取 `%USERPROFILE%\.claude\.credentials.json` 内的 `accessToken`，调用 Claude Messages API 并把响应头压缩为 `{s,sr,w,wr,st,ok}` 后写入 RX characteristic。
+`--test-preset` 不访问 Claude API，适合先验证 BLE。真实用量模式读取 `%USERPROFILE%\.claude\.credentials.json` 内的 `accessToken`，调用 Claude Messages API 并把响应头压缩为 `{s,sr,w,wr,st,ok}` 后写入 RX characteristic。`--watch` 是第一版长期运行模式；扫描、连接、通知、写入和 ack/nack 失败会记录日志并重试。观察日志时建议使用 `py -3 -u` 避免 Windows stdout 缓冲。
 
 ## UI 屏幕
 
