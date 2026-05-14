@@ -87,6 +87,10 @@ XingzhiDebugCommand xingzhi_debug_parse_command(const char *line) {
         command.type = XingzhiDebugCommandType::Button;
         read_token(&cursor, command.arg1, sizeof(command.arg1));
         read_token(&cursor, command.arg2, sizeof(command.arg2));
+    } else if (token_equals(token, "BLE")) {
+        command.type = XingzhiDebugCommandType::Ble;
+        read_token(&cursor, command.arg1, sizeof(command.arg1));
+        read_token(&cursor, command.arg2, sizeof(command.arg2));
     } else {
         command.type = XingzhiDebugCommandType::Unknown;
     }

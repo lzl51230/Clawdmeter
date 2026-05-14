@@ -258,6 +258,26 @@ void xingzhi_ble_request_refresh() {
     }
 }
 
+bool xingzhi_ble_reset_pairing() {
+    if (!server) {
+        copy_error("ble_not_initialized");
+        return false;
+    }
+
+    NimBLEDevice::deleteAllBonds();
+    has_received_data = false;
+    snprintf(last_error, sizeof(last_error), "");
+    Serial.println("Xingzhi BLE: bonds cleared");
+
+    if (server->getConnectedCount() > 0) {
+        NimBLEConnInfo peer = server->getPeerInfo(0);
+        server->disconnect(peer.getConnHandle());
+    }
+
+    need_advertise = true;
+    return true;
+}
+
 bool xingzhi_ble_hid_available() {
     return state == XingzhiBleState::Connected && input_kbd != nullptr;
 }

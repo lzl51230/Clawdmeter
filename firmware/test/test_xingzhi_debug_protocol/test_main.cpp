@@ -22,6 +22,10 @@ void test_debug_command_parser_accepts_known_commands() {
     TEST_ASSERT_EQUAL(XingzhiDebugCommandType::Button, command.type);
     TEST_ASSERT_EQUAL_STRING("cycle", command.arg1);
     TEST_ASSERT_EQUAL_STRING("click", command.arg2);
+
+    command = xingzhi_debug_parse_command("XDBG BLE reset");
+    TEST_ASSERT_EQUAL(XingzhiDebugCommandType::Ble, command.type);
+    TEST_ASSERT_EQUAL_STRING("reset", command.arg1);
 }
 
 void test_debug_command_parser_reports_unknown_commands() {

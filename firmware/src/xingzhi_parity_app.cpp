@@ -183,6 +183,17 @@ void send_action_result(XingzhiAction action, XingzhiActionEvent event, const Xi
     );
 }
 
+void send_ble_result(const char *subcommand, bool ok, const char *message) {
+    Serial.printf(
+        "XDBG BLE ok=%d command=%s ble=%s screen=%s message=%s\n",
+        ok ? 1 : 0,
+        subcommand && subcommand[0] ? subcommand : "-",
+        xingzhi_ble_state_name(),
+        xingzhi_screen_name(action_state.current_screen),
+        message && message[0] ? message : "-"
+    );
+}
+
 bool send_hid_press(XingzhiAction action) {
     if (action == XingzhiAction::HidSpace) {
         return xingzhi_ble_keyboard_press(HID_KEY_SPACE, 0);
@@ -410,6 +421,23 @@ void handle_button_command(const XingzhiDebugCommand &command) {
     send_action_result(action, event, result);
 }
 
+void handle_ble_command(const XingzhiDebugCommand &command) {
+    if (
+        strcmp(command.arg1, "reset") != 0 &&
+        strcmp(command.arg1, "recover") != 0 &&
+        strcmp(command.arg1, "clear") != 0
+    ) {
+        send_debug_error("unknown_ble_command", command.arg1);
+        return;
+    }
+
+    action_state.current_screen = XingzhiScreen::Status;
+    const bool ok = xingzhi_ble_reset_pairing();
+    snprintf(last_ble_detail, sizeof(last_ble_detail), "%s", ok ? "pairing_reset" : xingzhi_ble_last_error());
+    draw_meter();
+    send_ble_result(command.arg1, ok, ok ? "pairing_reset" : xingzhi_ble_last_error());
+}
+
 void handle_physical_button_event(const XingzhiButtonEvent &button_event) {
     if (!button_event.active) {
         return;
@@ -447,6 +475,9 @@ void handle_debug_line(const char *line) {
         break;
     case XingzhiDebugCommandType::Button:
         handle_button_command(command);
+        break;
+    case XingzhiDebugCommandType::Ble:
+        handle_ble_command(command);
         break;
     case XingzhiDebugCommandType::None:
         break;

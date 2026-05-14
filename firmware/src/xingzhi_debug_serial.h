@@ -8,6 +8,7 @@ enum class XingzhiDebugCommandType {
     Status,
     Screenshot,
     Button,
+    Ble,
     Unknown,
 };
 

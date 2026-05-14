@@ -114,6 +114,15 @@ def read_action_response(serial_port) -> dict[str, str]:
             raise RuntimeError(line)
 
 
+def read_ble_response(serial_port) -> dict[str, str]:
+    while True:
+        line = read_line_text(serial_port)
+        if line.startswith("XDBG BLE "):
+            return parse_key_values(line)
+        if line.startswith("XDBG ERROR "):
+            raise RuntimeError(line)
+
+
 def read_exact(serial_port, byte_count: int) -> bytes:
     chunks: list[bytes] = []
     remaining = byte_count
@@ -226,6 +235,13 @@ def build_parser() -> argparse.ArgumentParser:
     button.add_argument("--timeout", type=float, default=3.0, help="Serial read timeout in seconds")
     button.add_argument("--settle-delay", type=float, default=0.4, help="Delay after opening the port")
 
+    ble = subcommands.add_parser("ble", help="Run a BLE recovery command")
+    ble.add_argument("action", choices=["reset", "recover", "clear"], help="BLE recovery action")
+    ble.add_argument("--port", default=DEFAULT_PORT, help="Serial port, for example COM7")
+    ble.add_argument("--baud", type=int, default=DEFAULT_BAUD, help="Serial baud rate")
+    ble.add_argument("--timeout", type=float, default=3.0, help="Serial read timeout in seconds")
+    ble.add_argument("--settle-delay", type=float, default=0.4, help="Delay after opening the port")
+
     return parser
 
 
@@ -255,6 +271,13 @@ def run(
                 action = read_action_response(serial_port)
                 for key in sorted(action):
                     print(f"{key}={action[key]}", file=stdout)
+                return 0
+
+            if args.command == "ble":
+                write_command(serial_port, f"XDBG BLE {args.action}\n".encode("ascii"))
+                result = read_ble_response(serial_port)
+                for key in sorted(result):
+                    print(f"{key}={result[key]}", file=stdout)
                 return 0
 
             write_command(serial_port, SCREENSHOT_COMMAND)
