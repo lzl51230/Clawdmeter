@@ -7,6 +7,7 @@
 #include "data.h"
 #include "meter_format.h"
 #include "xingzhi_app_actions.h"
+#include "xingzhi_splash_anim.h"
 
 struct XingzhiUiState {
     XingzhiScreen screen = XingzhiScreen::Usage;
@@ -23,6 +24,7 @@ struct XingzhiUiState {
     int battery_level = -1;
     bool charging = false;
     const char *power_detail = "unknown";
+    const XingzhiSplashFrame *splash_frame = nullptr;
 };
 
 void xingzhi_meter_ui_draw(

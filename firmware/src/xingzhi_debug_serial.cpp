@@ -105,13 +105,17 @@ int xingzhi_debug_format_status(const XingzhiDebugStatus *status, char *buf, siz
     char detail[40];
     char ble_name[40];
     char action_error[40];
+    char splash[40];
+    char splash_category[24];
     sanitize_value(status->detail, detail, sizeof(detail));
     sanitize_value(status->ble_name, ble_name, sizeof(ble_name));
     sanitize_value(status->action_error, action_error, sizeof(action_error));
+    sanitize_value(status->splash, splash, sizeof(splash));
+    sanitize_value(status->splash_category, splash_category, sizeof(splash_category));
     return snprintf(
         buf,
         len,
-        "XDBG STATUS target=%s screen=%s width=%d height=%d payload=%s source=%s ble=%s ble_name=%s ble_mac=%s hid=%s power=%s battery=%s charging=%s adc=%s samples=%s uptime_ms=%lu framebuffer=%s detail=%s action=%s event=%s action_count=%lu action_error=%s",
+        "XDBG STATUS target=%s screen=%s width=%d height=%d payload=%s source=%s ble=%s ble_name=%s ble_mac=%s hid=%s power=%s battery=%s charging=%s adc=%s samples=%s uptime_ms=%lu framebuffer=%s detail=%s action=%s event=%s action_count=%lu action_error=%s splash=%s splash_category=%s splash_frame=%s",
         safe_value(status->target),
         safe_value(status->screen),
         status->width,
@@ -133,7 +137,10 @@ int xingzhi_debug_format_status(const XingzhiDebugStatus *status, char *buf, siz
         safe_value(status->action),
         safe_value(status->event),
         static_cast<unsigned long>(status->action_count),
-        action_error
+        action_error,
+        splash,
+        splash_category,
+        safe_value(status->splash_frame)
     );
 }
 

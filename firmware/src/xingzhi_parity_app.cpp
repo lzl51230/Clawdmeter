@@ -10,6 +10,7 @@
 #include "xingzhi_display_cfg.h"
 #include "xingzhi_meter_ui.h"
 #include "xingzhi_power.h"
+#include "xingzhi_splash_anim.h"
 
 using namespace xingzhi_display;
 
@@ -54,6 +55,7 @@ MeterPayloadState payload_state = MeterPayloadState::NoData;
 char payload_detail[40] = {};
 const char *last_payload_source = "none";
 XingzhiActionState action_state = {};
+XingzhiSplashAnimState splash_anim = {};
 char last_ble_detail[40] = {};
 const char *last_power_state = "";
 int last_power_level = -2;
@@ -113,16 +115,21 @@ void draw_meter() {
     state.battery_level = power.level;
     state.charging = power.charging;
     state.power_detail = power.state;
+    XingzhiSplashFrame splash_frame = {};
+    if (xingzhi_splash_anim_get_frame(&splash_anim, &splash_frame)) {
+        state.splash_frame = &splash_frame;
+    }
     xingzhi_meter_ui_draw_screen(&canvas, &state);
     canvas.flush();
 }
 
 void send_status() {
-    char line[560];
+    char line[720];
     char battery[8];
     char charging[4];
     char adc[20];
     char samples[8];
+    char splash_frame[20];
     XingzhiPowerStatus power = xingzhi_power_status();
     if (power.valid) {
         snprintf(battery, sizeof(battery), "%d", power.level);
@@ -137,6 +144,18 @@ void send_status() {
         snprintf(adc, sizeof(adc), "-");
     }
     snprintf(samples, sizeof(samples), "%u", static_cast<unsigned int>(power.sample_count));
+    XingzhiSplashSnapshot splash = xingzhi_splash_anim_snapshot(&splash_anim);
+    if (splash.valid) {
+        snprintf(
+            splash_frame,
+            sizeof(splash_frame),
+            "%u/%u",
+            static_cast<unsigned int>(splash.frame_index),
+            static_cast<unsigned int>(splash.frame_count)
+        );
+    } else {
+        snprintf(splash_frame, sizeof(splash_frame), "-");
+    }
 
     XingzhiDebugStatus status = {};
     status.target = "xingzhi_parity";
@@ -161,6 +180,9 @@ void send_status() {
     status.event = xingzhi_event_name(action_state.last_event);
     status.action_count = action_state.action_count;
     status.action_error = action_state.last_error[0] ? action_state.last_error : xingzhi_ble_last_error();
+    status.splash = splash.valid ? splash.name : "-";
+    status.splash_category = splash.valid ? splash.category : "-";
+    status.splash_frame = splash_frame;
     xingzhi_debug_format_status(&status, line, sizeof(line));
     Serial.println(line);
 }
@@ -536,6 +558,15 @@ void poll_power(uint32_t now_ms) {
     }
 }
 
+void poll_splash(uint32_t now_ms) {
+    if (action_state.current_screen != XingzhiScreen::Splash) {
+        return;
+    }
+    if (xingzhi_splash_anim_tick(&splash_anim, now_ms)) {
+        draw_meter();
+    }
+}
+
 void log_config() {
     Serial.println("Xingzhi parity firmware");
     Serial.printf("Panel: ST7789 %dx%d\n", DISPLAY_WIDTH, DISPLAY_HEIGHT);
@@ -558,6 +589,7 @@ void setup() {
     usage.ok = false;
     usage.valid = false;
     xingzhi_actions_init(&action_state);
+    xingzhi_splash_anim_init(&splash_anim, millis());
     xingzhi_buttons_begin();
     xingzhi_power_init();
 
@@ -585,6 +617,7 @@ void loop() {
 
     const uint32_t now = millis();
     poll_power(now);
+    poll_splash(now);
     if (now - last_log_ms > 10000) {
         last_log_ms = now;
         Serial.println("Xingzhi parity alive.");

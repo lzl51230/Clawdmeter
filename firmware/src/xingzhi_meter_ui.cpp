@@ -189,7 +189,7 @@ void draw_status_screen(Arduino_GFX *display, const XingzhiUiState *state) {
     }
 }
 
-void draw_splash_screen(Arduino_GFX *display, const XingzhiUiState *state) {
+void draw_splash_placeholder(Arduino_GFX *display, const XingzhiUiState *state) {
     draw_frame(display, COLOR_AMBER);
     draw_text(display, 26, 38, "Clawdmeter", COLOR_TEXT, 3);
     draw_text(display, 39, 82, "Xingzhi", COLOR_AMBER, 2);
@@ -200,6 +200,42 @@ void draw_splash_screen(Arduino_GFX *display, const XingzhiUiState *state) {
     display->drawFastHLine(107, 151, 26, COLOR_TEXT);
     draw_text(display, 32, 194, "cycle: usage/status/splash", COLOR_DIM);
     draw_clipped_text(display, 32, 214, state ? state->last_action : "none", COLOR_DIM, 24);
+}
+
+void draw_splash_frame(Arduino_GFX *display, const XingzhiSplashFrame *frame) {
+    if (!frame || !frame->cells || !frame->palette || frame->width == 0 || frame->height == 0) {
+        draw_splash_placeholder(display, nullptr);
+        return;
+    }
+
+    const int16_t cell_w = 240 / frame->width;
+    const int16_t cell_h = 240 / frame->height;
+    if (cell_w <= 0 || cell_h <= 0) {
+        draw_splash_placeholder(display, nullptr);
+        return;
+    }
+
+    const int16_t rendered_w = frame->width * cell_w;
+    const int16_t rendered_h = frame->height * cell_h;
+    const int16_t x0 = (240 - rendered_w) / 2;
+    const int16_t y0 = (240 - rendered_h) / 2;
+
+    display->fillScreen(COLOR_BG);
+    for (uint8_t y = 0; y < frame->height; ++y) {
+        for (uint8_t x = 0; x < frame->width; ++x) {
+            const uint8_t code = frame->cells[y * frame->width + x];
+            const uint16_t color = code < XINGZHI_SPLASH_PALETTE_SIZE ? frame->palette[code] : COLOR_BG;
+            display->fillRect(x0 + x * cell_w, y0 + y * cell_h, cell_w, cell_h, color);
+        }
+    }
+}
+
+void draw_splash_screen(Arduino_GFX *display, const XingzhiUiState *state) {
+    if (state && state->splash_frame) {
+        draw_splash_frame(display, state->splash_frame);
+        return;
+    }
+    draw_splash_placeholder(display, state);
 }
 
 }  // namespace

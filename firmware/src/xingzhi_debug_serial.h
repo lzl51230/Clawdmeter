@@ -42,6 +42,9 @@ struct XingzhiDebugStatus {
     const char *event = "";
     uint32_t action_count = 0;
     const char *action_error = "";
+    const char *splash = "";
+    const char *splash_category = "";
+    const char *splash_frame = "";
 };
 
 bool xingzhi_debug_is_usage_payload(const char *line);

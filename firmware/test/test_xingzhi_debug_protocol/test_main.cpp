@@ -54,8 +54,11 @@ void test_status_line_is_bounded_and_parseable() {
     status.uptime_ms = 1234;
     status.framebuffer = "ready";
     status.detail = "allowed";
+    status.splash = "idle breathe";
+    status.splash_category = "Idle";
+    status.splash_frame = "0/16";
 
-    char line[560];
+    char line[720];
     int written = xingzhi_debug_format_status(&status, line, sizeof(line));
 
     TEST_ASSERT_GREATER_THAN(0, written);
@@ -70,6 +73,9 @@ void test_status_line_is_bounded_and_parseable() {
     TEST_ASSERT_NOT_NULL(strstr(line, "hid=unavailable"));
     TEST_ASSERT_NOT_NULL(strstr(line, "power=valid"));
     TEST_ASSERT_NOT_NULL(strstr(line, "battery=80"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "splash=idle_breathe"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "splash_category=Idle"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "splash_frame=0/16"));
 }
 
 void test_screenshot_start_line_contains_frame_metadata() {
