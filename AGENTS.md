@@ -43,5 +43,5 @@
 不要提交 Claude 凭据、BLE MAC 缓存、本机 systemd 输出、截图原始 dump 或机器专用路径。daemon 读取 `~/.claude/.credentials.json`，Windows BLE 工具也只应读取本机私有凭据；必要的本地设置写进文档或 PR 描述，不写入源码。
 
 # Global Instructions
-所有产出物必须用简体中文撰写。
+Agent 新增或修改的说明性文档优先使用简体中文；代码标识、命令、协议字段、frontmatter、第三方引用和已有英文内容可保留必要英文。
 本仓库在 Codex 中默认使用 `Serena` 作为首选代码语义检索与编辑工具。
