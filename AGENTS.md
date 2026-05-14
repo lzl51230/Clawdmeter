@@ -19,7 +19,7 @@
 - `pio test -d firmware -e native` 运行固件 native 测试。
 - `python3 -m unittest discover -s tools/tests` 运行主机工具测试。
 - Windows 刷写示例：`py -3 -m esptool --chip esp32s3 --port COM7 --baud 460800 write-flash 0x0 firmware\.pio\build\xingzhi_parity\firmware.factory.bin`。
-- 串口调试示例：`py -3 tools\xingzhi_debug.py status|screenshot|button --port COM7`。
+- 串口调试示例：`py -3 tools\xingzhi_debug.py status|screenshot|button|payload|ble|probe --port COM7`。
 - BLE 测试 payload：`py -3 tools\windows_claude_usage_ble.py --test-preset high --require-ack`。
 
 ## Coding Style & Naming Conventions
@@ -32,7 +32,7 @@
 
 ## Agent-Specific Instructions
 
-保持三个 Xingzhi 目标分工清晰：`xingzhi_display_bringup` 只做显示驱动验证；`xingzhi_serial_meter` 只保留手动 USB JSON fallback；`xingzhi_parity` 才添加串口截图、BLE GATT、HID、三屏 UI 和电源状态。每个实现段完成后，先用串口闸门验证再继续：`status`、`screenshot`、模拟 `button`、BLE 写入确认、HID 可用性或 fallback payload。Parity 工作不要改默认 Waveshare 目标，除非是共享解析/格式化代码且有回归测试。
+保持三个 Xingzhi 目标分工清晰：`xingzhi_display_bringup` 只做显示驱动验证；`xingzhi_serial_meter` 只保留手动 USB JSON fallback；`xingzhi_parity` 才添加串口截图、BLE GATT、HID、三屏 UI、电源状态和硬件 probe。每个实现段完成后，先用串口闸门验证再继续：`status`、`screenshot`、模拟 `button`、`payload`、BLE 写入/恢复、HID 可用性或 `probe` 结果。Parity 工作不要改默认 Waveshare 目标，除非是共享解析/格式化代码且有回归测试。
 
 ## Commit & Pull Request Guidelines
 

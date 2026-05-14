@@ -1,7 +1,7 @@
 ---
 title: "feat: 继续移植 Xingzhi 原版功能"
 type: feat
-status: active
+status: completed
 date: 2026-05-14
 origin: docs/brainstorms/2026-05-14-xingzhi-original-parity-phase2-requirements.md
 ---

@@ -49,6 +49,17 @@ pio run -d firmware -e xingzhi_serial_meter
 python3 tools/send_test_payload.py normal --dry-run
 ```
 
+The current Xingzhi parity target adds the non-touch Clawdmeter experience for
+that board: USB debug screenshots, BLE GATT usage updates, BLE HID keys, three
+screens, Clawd splash animations, battery telemetry, and IMU capability probing.
+See [docs/xingzhi-parity.md](docs/xingzhi-parity.md) and
+[docs/xingzhi-serial-debug.md](docs/xingzhi-serial-debug.md).
+
+```powershell
+pio run -d firmware -e xingzhi_parity
+py -3 tools\xingzhi_debug.py status --port COM7
+```
+
 ## Prerequisites
 
 - Linux (tested on Ubuntu)

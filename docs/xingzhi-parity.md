@@ -5,14 +5,17 @@
 ## 当前能力
 
 - USB 串口 JSON fallback：兼容 `tools/send_test_payload.py`。
-- 串口调试：`tools/xingzhi_debug.py status|screenshot|button|ble`。
+- 串口调试：`tools/xingzhi_debug.py status|screenshot|button|ble|payload|probe`。
 - 240x240 framebuffer 截图：RGB565LE framed binary，可转 `.bmp` 或 `.ppm`。
 - 三屏 UI：usage、status、splash，通过 `button cycle --event click` 切换。
-- 动作分发器：`cycle`、`space`、`shift_tab` 可由串口模拟、实体按键和 BLE HID 共用。
+- 原版 Clawd splash 动画：复用生成帧数据，按 idle/normal/active/heavy 用量增长组选择动画，splash 屏内 `cycle` 切换动画。
+- 动作分发器：`cycle`、`exit`、`space`、`shift_tab` 可由串口模拟、实体按键和 BLE HID 共用。
 - BLE GATT 用量通路：广播名 `Claude Controller`，沿用原版 service/RX/TX/REQ UUID，BLE payload 与串口 fallback 走同一解析器。
 - Windows BLE 调试 CLI：`tools/windows_claude_usage_ble.py` 可发送真实 Claude 用量或固定测试 payload。
-- Xingzhi 三键输入：GPIO0 切屏，GPIO40 发送 Space，GPIO39 发送 Shift+Tab；HID 通过 BLE keyboard report 输出。
+- Xingzhi 三键输入：GPIO0 切屏/切换 splash 动画/长按退出 splash，GPIO40 发送 Space，GPIO39 发送 Shift+Tab；HID 通过 BLE keyboard report 输出。
 - 电源遥测：GPIO38 读取充电状态，ADC2 channel 6 读取电池电压分段，样本稳定后在 status 屏显示电量。
+- HID 电量同步：仅当电源状态为 `valid` 时，将稳定电量发布到 BLE HID battery service。
+- IMU 探测：`probe imu` 稳定报告当前 Xingzhi 1.54 WiFi 未发现可用 IMU 配置。
 
 ## 电源观察记录
 
@@ -55,13 +58,23 @@ U6 通过标准：串口模拟 `cycle` 后状态切屏；模拟 `space`/`shift_t
 
 2026-05-14 人工验收完成：实体 UI 切换键、BLE HID `Space` 和 BLE HID `Shift+Tab` 已在 Windows 当前焦点窗口验证通过。
 
-U7 通过标准：启动约 5 秒后连续查询 `status`，状态显示 `power=valid`、`samples=3`、`adc=<avg>/<raw>`、`battery=<0-100>` 和 `charging=0|1`；status 屏截图显示 battery 行。当前 USB 供电实测 ADC 约 2447-2449，显示 `battery=100`、`charging=1`。
+U7 通过标准：启动约 5 秒后连续查询 `status`，状态显示 `power=valid`、`samples=3`、`adc=<avg>/<raw>`、`battery=<0-100>` 和 `charging=0|1`；status 屏截图显示 battery 行。当前 USB 供电实测 ADC 约 2443-2444，显示 `battery=100`、`charging=1`。
 
 ## Phase 2 验证闸门
 
 U1 BLE 恢复入口通过标准：执行 `py -3 tools\xingzhi_debug.py ble reset --port COM7` 返回 `ok=1`、`message=pairing_reset`，随后 `status` 显示 `screen=status`、`ble=advertising`、`framebuffer=ready`，截图可见 status 屏恢复结果。若 Windows 仍持有旧 GATT 缓存，先在 Windows 蓝牙设备中移除 `Claude Controller` 后重新连接。
 
 U2 Windows watch 通过标准：执行 `py -3 -u tools\windows_claude_usage_ble.py --test-preset high --require-ack --watch --poll-interval 3 --retry-delay 1` 时，扫描、连接、通知或发送失败会记录日志并重试；成功写入后串口 `status` 显示 `source=ble`、`payload=valid`、`detail=limited`，status 屏截图显示 connected BLE 状态。一次性发送模式遇到 nack 或必需 ack 超时仍返回失败。
+
+U3 splash 动画通过标准：切到 `screen=splash` 后，`status` 显示 `splash=<name>`、`splash_group=idle`、`splash_category=<category>` 和递增的 `splash_frame`；连续截图能看到 Clawd 动画帧变化。
+
+U4 用量驱动动画通过标准：通过 `payload` 或 BLE 发送两次相隔至少 4 分钟的递增 session 样本后，`status` 显示 `splash_group=heavy` 且 splash 名称进入高用量组；随后发送 malformed payload 时 `payload=invalid`，但保留高用量 splash 组和最近有效读数。
+
+U5 splash 按键语义通过标准：在 splash 屏执行 `button cycle` 返回 `message=splash_next` 且仍停留在 `screen=splash`；执行 `button exit` 返回上一非 splash 屏。实体 GPIO0 短按走同一语义，长按退出 splash。
+
+U6 电源/HID 电量通过标准：USB 供电下 `status` 显示 `power=valid`、`battery=100`、`charging=1`、`hid_battery=100`；sampling、unavailable 或 error 状态不会发布新的 HID battery。
+
+U7 IMU probe 通过标准：执行 `py -3 tools\xingzhi_debug.py probe imu --port COM7` 返回 `ok=1`、`status=not_available`、`method=xiaozhi_board_config`、`detail=no_i2c_or_imu_config`、`checked=qmi8658_0x6b`；随后 `status` 和截图仍可正常回读。
 
 ## Windows BLE 用量发送
 
@@ -78,7 +91,15 @@ py -3 tools\windows_claude_usage_ble.py --watch
 
 - `usage`：保留已验证的 session、weekly、reset、payload 状态和 high/error 颜色。
 - `status`：显示 BLE/HID 状态、最近数据来源、payload 细节、最后动作、电源读数和恢复提示。
-- `splash`：提供 Clawdmeter/Xingzhi 识别和占位图形，不包含完整动画。
+- `splash`：播放原版 Clawd 像素动画，按用量增长组自动轮换；splash 内 `cycle` 切换动画，`exit` 或长按 cycle 返回上一屏。
+
+## 最终回归矩阵
+
+- 主机工具：`python3 -m unittest discover -s tools/tests`。
+- 固件 native：`pio test -d firmware -e native`。
+- Xingzhi parity 构建：`pio run -d firmware -e xingzhi_parity`。
+- 默认 Waveshare 构建：`pio run -d firmware -e waveshare_amoled_216`，确认原版目标仍可编译。
+- 硬件闸门：刷写 `xingzhi_parity` 后依次执行 `status`、`screenshot`、`button cycle`、`payload`、`ble reset`、`probe imu`；涉及 BLE/HID 的交互继续用 Windows 真实配对人工验收。
 
 ## 注意事项
 
