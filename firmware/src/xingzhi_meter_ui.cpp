@@ -106,8 +106,76 @@ void draw_frame(Arduino_GFX *display, uint16_t accent) {
 
 void draw_header(Arduino_GFX *display, const char *title, const char *label, uint16_t accent) {
     draw_text(display, 16, 12, title, COLOR_TEXT, 2);
-    display->fillRect(146, 12, 76, 19, accent);
-    draw_clipped_text(display, 152, 17, label, COLOR_BG, 10);
+    display->fillRect(116, 12, 54, 19, accent);
+    draw_clipped_text(display, 122, 17, label, COLOR_BG, 8);
+}
+
+uint16_t battery_color(int level, bool charging) {
+    if (charging) {
+        return COLOR_AMBER;
+    }
+    if (level < 20) {
+        return COLOR_RED;
+    }
+    if (level < 50) {
+        return COLOR_AMBER;
+    }
+    return COLOR_GREEN;
+}
+
+void draw_charging_bolt(Arduino_GFX *display, int16_t x, int16_t y, uint16_t color) {
+    display->drawLine(x + 8, y + 2, x + 5, y + 7, color);
+    display->drawLine(x + 5, y + 7, x + 9, y + 7, color);
+    display->drawLine(x + 9, y + 7, x + 6, y + 12, color);
+    display->drawLine(x + 9, y + 2, x + 6, y + 7, color);
+    display->drawLine(x + 6, y + 7, x + 10, y + 7, color);
+    display->drawLine(x + 10, y + 7, x + 7, y + 12, color);
+}
+
+void draw_power_badge(Arduino_GFX *display, const XingzhiUiState *state) {
+    const bool valid = state && state->power_valid;
+    const bool charging = state && state->charging;
+    const int level = valid ? state->battery_level : -1;
+    const uint16_t color = valid || charging ? battery_color(level, charging) : COLOR_DIM;
+
+    char label[8];
+    if (valid) {
+        snprintf(label, sizeof(label), "%d%%", level);
+    } else {
+        snprintf(label, sizeof(label), "--");
+    }
+
+    constexpr int16_t badge_x = 172;
+    constexpr int16_t badge_y = 8;
+    constexpr int16_t icon_x = 211;
+    constexpr int16_t icon_y = 11;
+    constexpr int16_t body_w = 18;
+    constexpr int16_t body_h = 11;
+    constexpr int16_t inner_w = body_w - 4;
+
+    display->fillRect(badge_x, badge_y, 62, 20, COLOR_BG);
+
+    const int16_t text_w = static_cast<int16_t>(strlen(label) * 6);
+    draw_text(display, icon_x - text_w - 5, icon_y + 2, label, valid ? COLOR_TEXT : COLOR_DIM);
+
+    display->drawRect(icon_x, icon_y, body_w, body_h, color);
+    display->fillRect(icon_x + body_w, icon_y + 3, 3, 5, color);
+
+    if (valid) {
+        int fill_w = (level * inner_w + 99) / 100;
+        if (fill_w < 0) {
+            fill_w = 0;
+        } else if (fill_w > inner_w) {
+            fill_w = inner_w;
+        }
+        if (fill_w > 0) {
+            display->fillRect(icon_x + 2, icon_y + 2, fill_w, body_h - 4, color);
+        }
+    }
+
+    if (charging) {
+        draw_charging_bolt(display, icon_x + 3, icon_y - 1, COLOR_AMBER);
+    }
 }
 
 const char *usage_title_for(const UsageData *data) {
@@ -129,7 +197,8 @@ void draw_usage_screen(
     Arduino_GFX *display,
     const UsageData *data,
     MeterPayloadState payload_state,
-    const char *detail
+    const char *detail,
+    const XingzhiUiState *state
 ) {
     const bool has_data = data && data->valid;
     const MeterLevel level = meter_level_for(data, payload_state);
@@ -157,6 +226,8 @@ void draw_usage_screen(
     } else if (payload_state == MeterPayloadState::NoData) {
         draw_text(display, 18, 222, "Send JSON line on COM7", COLOR_DIM);
     }
+
+    draw_power_badge(display, state);
 }
 
 void draw_status_screen(Arduino_GFX *display, const XingzhiUiState *state) {
@@ -191,6 +262,8 @@ void draw_status_screen(Arduino_GFX *display, const XingzhiUiState *state) {
         draw_clipped_text(display, 18, 207, state && state->ble_detail ? state->ble_detail : "BLE not enabled yet", COLOR_DIM, 26);
         draw_text(display, 18, 224, "Pair after BLE stage", COLOR_DIM);
     }
+
+    draw_power_badge(display, state);
 }
 
 void draw_splash_placeholder(Arduino_GFX *display, const XingzhiUiState *state) {
@@ -237,9 +310,11 @@ void draw_splash_frame(Arduino_GFX *display, const XingzhiSplashFrame *frame) {
 void draw_splash_screen(Arduino_GFX *display, const XingzhiUiState *state) {
     if (state && state->splash_frame) {
         draw_splash_frame(display, state->splash_frame);
+        draw_power_badge(display, state);
         return;
     }
     draw_splash_placeholder(display, state);
+    draw_power_badge(display, state);
 }
 
 }  // namespace
@@ -250,7 +325,7 @@ void xingzhi_meter_ui_draw(
     MeterPayloadState payload_state,
     const char *detail
 ) {
-    draw_usage_screen(display, data, payload_state, detail);
+    draw_usage_screen(display, data, payload_state, detail, nullptr);
 }
 
 void xingzhi_meter_ui_draw_screen(Arduino_GFX *display, const XingzhiUiState *state) {
@@ -267,7 +342,7 @@ void xingzhi_meter_ui_draw_screen(Arduino_GFX *display, const XingzhiUiState *st
         break;
     case XingzhiScreen::Usage:
     default:
-        draw_usage_screen(display, state->data, state->payload_state, state->detail);
+        draw_usage_screen(display, state->data, state->payload_state, state->detail, state);
         break;
     }
 }
