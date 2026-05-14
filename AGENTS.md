@@ -9,6 +9,7 @@
 - `daemon/` 存放 Linux 用户级 BLE daemon；Windows Xingzhi 主机脚本在 `tools/windows_claude_usage_ble.py`。
 - `tools/` 存放备份、测试 payload、截图调试和资源转换工具；`tools/tests/` 是 Python 单元测试。
 - `firmware/test/` 是 PlatformIO native 测试；`assets/`、`screenshots/` 保存字体、图标、演示和参考截图。
+- `docs/solutions/` 存放已解决问题的知识沉淀，按类别组织并带 YAML frontmatter（`module`、`tags`、`problem_type`），适合在实现、调试或做设计决策前检索相关经验。
 
 ## Build, Test, and Development Commands
 

@@ -96,7 +96,7 @@ void draw_test_screen() {
 
     draw_label(45, 152, "SPI MODE 3", COLOR_WHITE, 2);
     draw_label(57, 176, "BL GPIO13", COLOR_GRAY);
-    draw_label(48, 193, "Invert color: on", COLOR_GRAY);
+    draw_label(48, 193, DISPLAY_INVERT_COLOR ? "Invert color: on" : "Invert color: off", COLOR_GRAY);
 }
 
 void log_config() {
@@ -113,6 +113,7 @@ void log_config() {
         static_cast<long>(DISPLAY_SPI_FREQUENCY)
     );
     Serial.printf("Backlight: GPIO%d invert=%s\n", PIN_LCD_BACKLIGHT, BACKLIGHT_OUTPUT_INVERT ? "true" : "false");
+    Serial.printf("Display invert color: %s\n", DISPLAY_INVERT_COLOR ? "true" : "false");
 }
 
 }  // namespace

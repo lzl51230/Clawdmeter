@@ -8,7 +8,7 @@
 - 屏幕：240x240 ST7789 SPI
 - SPI：SDA GPIO10、SCL GPIO9、DC GPIO8、CS GPIO14、RES GPIO18
 - 背光：GPIO13
-- 初始参数：SPI mode 3、80 MHz、颜色反转开启
+- 当前参数：SPI mode 3、80 MHz、颜色反转关闭（`DISPLAY_INVERT_COLOR=false`）
 
 ## 1. 确认 Windows 工具
 
@@ -99,6 +99,8 @@ py -3 -m esptool --chip esp32s3 --port COM7 --baud 460800 write-flash 0x0 firmwa
 - `xingzhi_display_bringup` factory image 已刷写并通过 esptool hash 校验。
 - 串口日志显示 `Display test screen drawn.` 和周期性 `Display bring-up alive.`。
 - 实体屏幕能看到测试画面、四角 `TL/TR/BL/BR`、红绿蓝白色块和外框。
+
+2026-05-14 复测深色 UI 时确认：串口 framebuffer 已是黑底，但实体屏显示白底时，根因是 ST7789 输出反相；本机 Xiaozhi 面板应使用 `DISPLAY_INVERT_COLOR=false`，刷写后实体屏黑底和颜色显示正常。
 
 ## 进入下一阶段条件
 

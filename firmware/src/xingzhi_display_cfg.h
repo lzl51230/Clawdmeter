@@ -16,7 +16,7 @@ constexpr int PIN_LCD_RES = 18;
 constexpr int PIN_LCD_BACKLIGHT = 13;
 
 constexpr bool BACKLIGHT_OUTPUT_INVERT = false;
-constexpr bool DISPLAY_INVERT_COLOR = true;
+constexpr bool DISPLAY_INVERT_COLOR = false;
 constexpr uint8_t DISPLAY_ROTATION = 0;
 constexpr int32_t DISPLAY_SPI_FREQUENCY = 80000000;
 constexpr int8_t DISPLAY_SPI_MODE = SPI_MODE3;
