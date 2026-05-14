@@ -8,7 +8,9 @@ struct XingzhiButtonDebounce {
     bool initialized = false;
     bool raw_pressed = false;
     bool stable_pressed = false;
+    bool long_press_reported = false;
     uint32_t last_change_ms = 0;
+    uint32_t stable_pressed_ms = 0;
 };
 
 struct XingzhiButtonEvent {
@@ -23,7 +25,8 @@ XingzhiButtonEvent xingzhi_button_debounce_update(
     XingzhiAction action,
     bool raw_pressed,
     uint32_t now_ms,
-    uint32_t debounce_ms
+    uint32_t debounce_ms,
+    uint32_t long_press_ms = 0
 );
 
 void xingzhi_buttons_begin();

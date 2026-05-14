@@ -14,6 +14,13 @@ XingzhiScreen next_screen(XingzhiScreen screen) {
     }
 }
 
+XingzhiScreen exit_target(const XingzhiActionState *state) {
+    if (!state || state->previous_screen == XingzhiScreen::Splash) {
+        return XingzhiScreen::Usage;
+    }
+    return state->previous_screen;
+}
+
 bool is_pressed(const XingzhiActionState *state, XingzhiAction action) {
     if (!state) {
         return false;
@@ -23,6 +30,7 @@ bool is_pressed(const XingzhiActionState *state, XingzhiAction action) {
         return state->space_pressed;
     case XingzhiAction::HidShiftTab:
         return state->shift_tab_pressed;
+    case XingzhiAction::ExitSplash:
     case XingzhiAction::CycleScreen:
     case XingzhiAction::None:
     default:
@@ -41,6 +49,7 @@ void set_pressed(XingzhiActionState *state, XingzhiAction action, bool pressed) 
     case XingzhiAction::HidShiftTab:
         state->shift_tab_pressed = pressed;
         break;
+    case XingzhiAction::ExitSplash:
     case XingzhiAction::CycleScreen:
     case XingzhiAction::None:
     default:
@@ -91,10 +100,37 @@ XingzhiActionResult xingzhi_actions_dispatch(
 
     if (action == XingzhiAction::CycleScreen) {
         if (event == XingzhiActionEvent::Click) {
+            if (state->current_screen == XingzhiScreen::Splash) {
+                XingzhiActionResult result = record_success(state, action, event, "splash_next");
+                result.splash_next = true;
+                return result;
+            }
+            const XingzhiScreen before = state->current_screen;
             state->current_screen = next_screen(state->current_screen);
+            state->previous_screen = state->current_screen == XingzhiScreen::Splash ? before : state->current_screen;
+            return record_success(state, action, event, "screen_changed");
+        }
+        if (event == XingzhiActionEvent::LongPress) {
+            if (state->current_screen == XingzhiScreen::Splash) {
+                state->current_screen = exit_target(state);
+                state->previous_screen = state->current_screen;
+                return record_success(state, action, event, "splash_exit");
+            }
+            const XingzhiScreen before = state->current_screen;
+            state->current_screen = next_screen(state->current_screen);
+            state->previous_screen = state->current_screen == XingzhiScreen::Splash ? before : state->current_screen;
             return record_success(state, action, event, "screen_changed");
         }
         return record_success(state, action, event, "cycle_event_recorded");
+    }
+
+    if (action == XingzhiAction::ExitSplash) {
+        if (state->current_screen != XingzhiScreen::Splash) {
+            return record_error(state, "not_on_splash");
+        }
+        state->current_screen = exit_target(state);
+        state->previous_screen = state->current_screen;
+        return record_success(state, action, event, "splash_exit");
     }
 
     if (event == XingzhiActionEvent::Press) {
@@ -128,6 +164,8 @@ const char *xingzhi_action_name(XingzhiAction action) {
     switch (action) {
     case XingzhiAction::CycleScreen:
         return "cycle";
+    case XingzhiAction::ExitSplash:
+        return "exit";
     case XingzhiAction::HidSpace:
         return "space";
     case XingzhiAction::HidShiftTab:
@@ -144,6 +182,8 @@ const char *xingzhi_event_name(XingzhiActionEvent event) {
         return "press";
     case XingzhiActionEvent::Release:
         return "release";
+    case XingzhiActionEvent::LongPress:
+        return "long_press";
     case XingzhiActionEvent::Click:
     default:
         return "click";

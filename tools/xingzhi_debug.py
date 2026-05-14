@@ -228,8 +228,16 @@ def build_parser() -> argparse.ArgumentParser:
     screenshot.add_argument("--raw-output", type=Path, help="Optional raw RGB565 output path")
 
     button = subcommands.add_parser("button", help="Simulate a Xingzhi button action")
-    button.add_argument("button", choices=["cycle", "screen", "1", "space", "2", "shift_tab", "shift-tab", "tab", "3"])
-    button.add_argument("--event", choices=["click", "press", "release"], default="click", help="Simulated button event")
+    button.add_argument(
+        "button",
+        choices=["cycle", "screen", "1", "exit", "back", "splash_exit", "space", "2", "shift_tab", "shift-tab", "tab", "3"],
+    )
+    button.add_argument(
+        "--event",
+        choices=["click", "press", "release", "long", "hold", "long_press"],
+        default="click",
+        help="Simulated button event",
+    )
     button.add_argument("--port", default=DEFAULT_PORT, help="Serial port, for example COM7")
     button.add_argument("--baud", type=int, default=DEFAULT_BAUD, help="Serial baud rate")
     button.add_argument("--timeout", type=float, default=3.0, help="Serial read timeout in seconds")

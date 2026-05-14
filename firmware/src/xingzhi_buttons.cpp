@@ -7,6 +7,7 @@
 namespace {
 
 constexpr uint32_t DEBOUNCE_MS = 35;
+constexpr uint32_t LONG_PRESS_MS = 800;
 
 struct PhysicalButton {
     int pin;
@@ -38,7 +39,9 @@ void xingzhi_button_debounce_init(XingzhiButtonDebounce *state, bool raw_pressed
     state->initialized = true;
     state->raw_pressed = raw_pressed;
     state->stable_pressed = raw_pressed;
+    state->long_press_reported = false;
     state->last_change_ms = now_ms;
+    state->stable_pressed_ms = raw_pressed ? now_ms : 0;
 }
 
 XingzhiButtonEvent xingzhi_button_debounce_update(
@@ -46,7 +49,8 @@ XingzhiButtonEvent xingzhi_button_debounce_update(
     XingzhiAction action,
     bool raw_pressed,
     uint32_t now_ms,
-    uint32_t debounce_ms
+    uint32_t debounce_ms,
+    uint32_t long_press_ms
 ) {
     XingzhiButtonEvent event = {};
     event.action = action;
@@ -67,8 +71,31 @@ XingzhiButtonEvent xingzhi_button_debounce_update(
 
     if (state->stable_pressed != state->raw_pressed && now_ms - state->last_change_ms >= debounce_ms) {
         state->stable_pressed = state->raw_pressed;
+        if (state->stable_pressed) {
+            state->long_press_reported = false;
+            state->stable_pressed_ms = now_ms;
+            event.active = true;
+            event.event = XingzhiActionEvent::Press;
+        } else {
+            state->stable_pressed_ms = 0;
+            if (!state->long_press_reported) {
+                event.active = true;
+                event.event = XingzhiActionEvent::Release;
+            }
+            state->long_press_reported = false;
+        }
+        return event;
+    }
+
+    if (
+        long_press_ms > 0 &&
+        state->stable_pressed &&
+        !state->long_press_reported &&
+        now_ms - state->stable_pressed_ms >= long_press_ms
+    ) {
+        state->long_press_reported = true;
         event.active = true;
-        event.event = state->stable_pressed ? XingzhiActionEvent::Press : XingzhiActionEvent::Release;
+        event.event = XingzhiActionEvent::LongPress;
     }
     return event;
 }
@@ -93,7 +120,8 @@ bool xingzhi_buttons_poll(XingzhiButtonEvent *event, uint32_t now_ms) {
             button.action,
             read_pin_pressed(button.pin),
             now_ms,
-            DEBOUNCE_MS
+            DEBOUNCE_MS,
+            button.action == XingzhiAction::CycleScreen ? LONG_PRESS_MS : 0
         );
         if (next.active) {
             *event = next;

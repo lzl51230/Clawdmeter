@@ -11,6 +11,7 @@ enum class XingzhiScreen {
 enum class XingzhiAction {
     None,
     CycleScreen,
+    ExitSplash,
     HidSpace,
     HidShiftTab,
 };
@@ -19,10 +20,12 @@ enum class XingzhiActionEvent {
     Click,
     Press,
     Release,
+    LongPress,
 };
 
 struct XingzhiActionState {
     XingzhiScreen current_screen = XingzhiScreen::Usage;
+    XingzhiScreen previous_screen = XingzhiScreen::Usage;
     XingzhiAction last_action = XingzhiAction::None;
     XingzhiActionEvent last_event = XingzhiActionEvent::Click;
     uint32_t action_count = 0;
@@ -34,6 +37,7 @@ struct XingzhiActionState {
 struct XingzhiActionResult {
     bool ok = false;
     const char *message = "";
+    bool splash_next = false;
 };
 
 void xingzhi_actions_init(XingzhiActionState *state);

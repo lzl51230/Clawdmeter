@@ -148,6 +148,23 @@ class XingzhiDebugToolTest(unittest.TestCase):
         self.assertEqual(serial_port.writes[0], b"XDBG BUTTON cycle click\n")
         self.assertIn("screen=status", stdout.getvalue())
 
+    def test_button_command_accepts_splash_exit_and_long_press(self):
+        serial_port = FakeSerial("COM9", 115200)
+        serial_port.read_buffer.extend(
+            b"XDBG ACTION ok=1 action=exit event=long_press screen=status count=3 message=splash_exit\n"
+        )
+
+        code = xingzhi_debug.run(
+            ["button", "exit", "--event", "long_press", "--port", "COM9"],
+            stdout=io.StringIO(),
+            stderr=io.StringIO(),
+            serial_factory=lambda *args, **kwargs: serial_port,
+            sleep_fn=lambda _: None,
+        )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(serial_port.writes[0], b"XDBG BUTTON exit long_press\n")
+
     def test_ble_reset_command_writes_recovery_command(self):
         serial_port = FakeSerial("COM9", 115200)
         serial_port.read_buffer.extend(

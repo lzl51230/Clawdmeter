@@ -267,6 +267,9 @@ XingzhiActionResult apply_hid_side_effect(
 
 XingzhiActionResult execute_action(XingzhiAction action, XingzhiActionEvent event) {
     XingzhiActionResult result = xingzhi_actions_dispatch(&action_state, action, event);
+    if (result.ok && result.splash_next) {
+        xingzhi_splash_anim_next(&splash_anim, millis());
+    }
     return apply_hid_side_effect(action, event, result);
 }
 
@@ -410,6 +413,10 @@ bool parse_action(const char *token, XingzhiAction *action) {
         *action = XingzhiAction::CycleScreen;
         return true;
     }
+    if (strcmp(token, "exit") == 0 || strcmp(token, "back") == 0 || strcmp(token, "splash_exit") == 0) {
+        *action = XingzhiAction::ExitSplash;
+        return true;
+    }
     if (strcmp(token, "space") == 0 || strcmp(token, "2") == 0) {
         *action = XingzhiAction::HidSpace;
         return true;
@@ -440,6 +447,10 @@ bool parse_event(const char *token, XingzhiActionEvent *event) {
     }
     if (strcmp(token, "release") == 0) {
         *event = XingzhiActionEvent::Release;
+        return true;
+    }
+    if (strcmp(token, "long") == 0 || strcmp(token, "hold") == 0 || strcmp(token, "long_press") == 0) {
+        *event = XingzhiActionEvent::LongPress;
         return true;
     }
     return false;
@@ -486,10 +497,10 @@ void handle_physical_button_event(const XingzhiButtonEvent &button_event) {
 
     XingzhiActionEvent event = button_event.event;
     if (button_event.action == XingzhiAction::CycleScreen) {
-        if (button_event.event == XingzhiActionEvent::Release) {
+        if (button_event.event == XingzhiActionEvent::Press) {
             return;
         }
-        event = XingzhiActionEvent::Click;
+        event = button_event.event == XingzhiActionEvent::Release ? XingzhiActionEvent::Click : button_event.event;
     }
 
     XingzhiActionResult result = execute_action(button_event.action, event);
