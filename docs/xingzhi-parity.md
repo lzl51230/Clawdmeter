@@ -43,6 +43,8 @@ U5 通过标准：Windows 侧安装 Bleak 后执行 `py -3 tools\windows_claude_
 
 U6 通过标准：串口模拟 `cycle` 后状态切屏；模拟 `space`/`shift_tab` 时 `action` 和 `event` 被记录。未连接 BLE HID 时状态显示 `hid=unavailable` 和 `action_error=hid_unavailable`；BLE 客户端保持连接时状态显示 `hid=available`。实体按键需要人工按压验证，配对为键盘后 Space 与 Shift+Tab 应出现在当前焦点窗口。
 
+2026-05-14 人工验收完成：实体 UI 切换键、BLE HID `Space` 和 BLE HID `Shift+Tab` 已在 Windows 当前焦点窗口验证通过。
+
 U7 通过标准：启动约 5 秒后连续查询 `status`，状态显示 `power=valid`、`samples=3`、`adc=<avg>/<raw>`、`battery=<0-100>` 和 `charging=0|1`；status 屏截图显示 battery 行。当前 USB 供电实测 ADC 约 2447-2449，显示 `battery=100`、`charging=1`。
 
 ## Windows BLE 用量发送
