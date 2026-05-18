@@ -157,6 +157,7 @@ void test_names_are_stable_for_debug_status() {
     TEST_ASSERT_EQUAL_STRING("status", xingzhi_screen_name(XingzhiScreen::Status));
     TEST_ASSERT_EQUAL_STRING("splash", xingzhi_screen_name(XingzhiScreen::Splash));
     TEST_ASSERT_EQUAL_STRING("exit", xingzhi_action_name(XingzhiAction::ExitSplash));
+    TEST_ASSERT_EQUAL_STRING("voice", xingzhi_action_name(XingzhiAction::VoiceInput));
     TEST_ASSERT_EQUAL_STRING("space", xingzhi_action_name(XingzhiAction::HidSpace));
     TEST_ASSERT_EQUAL_STRING("release", xingzhi_event_name(XingzhiActionEvent::Release));
     TEST_ASSERT_EQUAL_STRING("long_press", xingzhi_event_name(XingzhiActionEvent::LongPress));
@@ -167,6 +168,9 @@ void test_hid_action_helper_identifies_keyboard_actions() {
     TEST_ASSERT_TRUE(xingzhi_action_is_hid(XingzhiAction::HidShiftTab));
     TEST_ASSERT_FALSE(xingzhi_action_is_hid(XingzhiAction::CycleScreen));
     TEST_ASSERT_FALSE(xingzhi_action_is_hid(XingzhiAction::ExitSplash));
+    TEST_ASSERT_FALSE(xingzhi_action_is_hid(XingzhiAction::VoiceInput));
+    TEST_ASSERT_TRUE(xingzhi_action_is_voice(XingzhiAction::VoiceInput));
+    TEST_ASSERT_FALSE(xingzhi_action_is_voice(XingzhiAction::HidShiftTab));
 }
 
 void test_button_debounce_filters_bounce_until_stable() {
@@ -227,6 +231,34 @@ void test_button_debounce_reports_long_press_once_and_suppresses_release() {
     TEST_ASSERT_FALSE(event.active);
 }
 
+void test_button_debounce_can_report_release_after_long_press_for_voice() {
+    XingzhiButtonDebounce debounce = {};
+
+    xingzhi_button_debounce_update(&debounce, XingzhiAction::VoiceInput, false, 0, 35, 800, true);
+    xingzhi_button_debounce_update(&debounce, XingzhiAction::VoiceInput, true, 10, 35, 800, true);
+    XingzhiButtonEvent event = xingzhi_button_debounce_update(
+        &debounce,
+        XingzhiAction::VoiceInput,
+        true,
+        45,
+        35,
+        800,
+        true
+    );
+    TEST_ASSERT_TRUE(event.active);
+    TEST_ASSERT_EQUAL(XingzhiActionEvent::Press, event.event);
+
+    event = xingzhi_button_debounce_update(&debounce, XingzhiAction::VoiceInput, true, 845, 35, 800, true);
+    TEST_ASSERT_TRUE(event.active);
+    TEST_ASSERT_EQUAL(XingzhiActionEvent::LongPress, event.event);
+
+    event = xingzhi_button_debounce_update(&debounce, XingzhiAction::VoiceInput, false, 900, 35, 800, true);
+    TEST_ASSERT_FALSE(event.active);
+    event = xingzhi_button_debounce_update(&debounce, XingzhiAction::VoiceInput, false, 935, 35, 800, true);
+    TEST_ASSERT_TRUE(event.active);
+    TEST_ASSERT_EQUAL(XingzhiActionEvent::Release, event.event);
+}
+
 int main(int argc, char **argv) {
     UNITY_BEGIN();
     RUN_TEST(test_cycle_click_enters_splash_then_advances_animation);
@@ -241,5 +273,6 @@ int main(int argc, char **argv) {
     RUN_TEST(test_hid_action_helper_identifies_keyboard_actions);
     RUN_TEST(test_button_debounce_filters_bounce_until_stable);
     RUN_TEST(test_button_debounce_reports_long_press_once_and_suppresses_release);
+    RUN_TEST(test_button_debounce_can_report_release_after_long_press_for_voice);
     return UNITY_END();
 }

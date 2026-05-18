@@ -56,6 +56,7 @@ bool is_pressed(const XingzhiActionState *state, XingzhiAction action) {
         return state->space_pressed;
     case XingzhiAction::HidShiftTab:
         return state->shift_tab_pressed;
+    case XingzhiAction::VoiceInput:
     case XingzhiAction::ExitSplash:
     case XingzhiAction::CycleScreen:
     case XingzhiAction::None:
@@ -75,6 +76,7 @@ void set_pressed(XingzhiActionState *state, XingzhiAction action, bool pressed) 
     case XingzhiAction::HidShiftTab:
         state->shift_tab_pressed = pressed;
         break;
+    case XingzhiAction::VoiceInput:
     case XingzhiAction::ExitSplash:
     case XingzhiAction::CycleScreen:
     case XingzhiAction::None:
@@ -153,6 +155,19 @@ XingzhiActionResult xingzhi_actions_dispatch(
         return record_success(state, action, event, "splash_exit");
     }
 
+    if (action == XingzhiAction::VoiceInput) {
+        if (event == XingzhiActionEvent::Press) {
+            return record_success(state, action, event, "voice_armed");
+        }
+        if (event == XingzhiActionEvent::LongPress) {
+            return record_success(state, action, event, "voice_recording");
+        }
+        if (event == XingzhiActionEvent::Release) {
+            return record_success(state, action, event, "voice_release");
+        }
+        return record_success(state, action, event, "voice_short_ignored");
+    }
+
     if (event == XingzhiActionEvent::Press) {
         set_pressed(state, action, true);
         return record_success(state, action, event, "pressed");
@@ -186,6 +201,8 @@ const char *xingzhi_action_name(XingzhiAction action) {
         return "cycle";
     case XingzhiAction::ExitSplash:
         return "exit";
+    case XingzhiAction::VoiceInput:
+        return "voice";
     case XingzhiAction::HidSpace:
         return "space";
     case XingzhiAction::HidShiftTab:
@@ -212,4 +229,8 @@ const char *xingzhi_event_name(XingzhiActionEvent event) {
 
 bool xingzhi_action_is_hid(XingzhiAction action) {
     return action == XingzhiAction::HidSpace || action == XingzhiAction::HidShiftTab;
+}
+
+bool xingzhi_action_is_voice(XingzhiAction action) {
+    return action == XingzhiAction::VoiceInput;
 }

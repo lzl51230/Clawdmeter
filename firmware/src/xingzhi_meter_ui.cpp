@@ -236,15 +236,33 @@ void draw_status_screen(Arduino_GFX *display, const XingzhiUiState *state) {
     draw_frame(display, accent);
     draw_header(display, "Claude", "STATUS", accent);
 
-    draw_text(display, 18, 48, "Bluetooth", COLOR_TEXT, 2);
-    draw_key_value(display, 76, "state", state ? state->ble_state : "unknown", COLOR_TEXT);
-    draw_key_value(display, 96, "source", state ? state->last_source : "none", COLOR_TEXT);
-    draw_key_value(display, 116, "payload", state ? state->detail : "-", COLOR_TEXT);
-    draw_key_value(display, 136, "action", state ? state->last_action : "none", COLOR_TEXT);
+    draw_text(display, 18, 44, "Bluetooth", COLOR_TEXT, 2);
+    draw_key_value(display, 70, "state", state ? state->ble_state : "unknown", COLOR_TEXT);
+    draw_key_value(display, 90, "source", state ? state->last_source : "none", COLOR_TEXT);
+    draw_key_value(display, 110, "payload", state ? state->detail : "-", COLOR_TEXT);
+    draw_key_value(display, 130, "action", state ? state->last_action : "none", COLOR_TEXT);
+
+    char voice_buf[28];
+    const char *voice_label =
+        state && state->voice_detail && state->voice_detail[0] && strcmp(state->voice_detail, state->voice) != 0
+            ? state->voice_detail
+            : (state && state->voice ? state->voice : "idle");
+    if (state && state->voice_duration_ms > 0) {
+        snprintf(
+            voice_buf,
+            sizeof(voice_buf),
+            "%s %lus",
+            voice_label,
+            static_cast<unsigned long>((state->voice_duration_ms + 999) / 1000)
+        );
+    } else {
+        snprintf(voice_buf, sizeof(voice_buf), "%s", voice_label);
+    }
+    draw_key_value(display, 150, "voice", voice_buf, COLOR_TEXT);
 
     char count_buf[16];
     snprintf(count_buf, sizeof(count_buf), "%lu", static_cast<unsigned long>(state ? state->action_count : 0));
-    draw_key_value(display, 156, "count", count_buf, COLOR_TEXT);
+    draw_key_value(display, 170, "count", count_buf, COLOR_TEXT);
 
     char power_buf[24];
     if (state && state->power_valid) {
@@ -252,15 +270,13 @@ void draw_status_screen(Arduino_GFX *display, const XingzhiUiState *state) {
     } else {
         snprintf(power_buf, sizeof(power_buf), "%s", state && state->power_detail ? state->power_detail : "unknown");
     }
-    draw_key_value(display, 176, "battery", power_buf, state && state->power_valid ? COLOR_TEXT : COLOR_DIM);
+    draw_key_value(display, 190, "battery", power_buf, state && state->power_valid ? COLOR_TEXT : COLOR_DIM);
 
-    display->drawFastHLine(16, 196, 208, COLOR_PANEL);
+    display->drawFastHLine(16, 207, 208, COLOR_PANEL);
     if (has_error) {
-        draw_clipped_text(display, 18, 207, state->last_error, COLOR_RED, 26);
-        draw_text(display, 18, 224, "Use serial fallback", COLOR_DIM);
+        draw_clipped_text(display, 18, 216, state->last_error, COLOR_RED, 26);
     } else {
-        draw_clipped_text(display, 18, 207, state && state->ble_detail ? state->ble_detail : "BLE not enabled yet", COLOR_DIM, 26);
-        draw_text(display, 18, 224, "Pair after BLE stage", COLOR_DIM);
+        draw_clipped_text(display, 18, 216, state && state->ble_detail ? state->ble_detail : "BLE not enabled yet", COLOR_DIM, 26);
     }
 
     draw_power_badge(display, state);

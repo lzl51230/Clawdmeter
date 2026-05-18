@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 enum class XingzhiBleState {
@@ -25,6 +26,10 @@ void xingzhi_ble_send_ack();
 void xingzhi_ble_send_nack();
 void xingzhi_ble_request_refresh();
 bool xingzhi_ble_reset_pairing();
+bool xingzhi_ble_voice_subscribed();
+bool xingzhi_ble_voice_notify(const uint8_t *data, size_t len);
+bool xingzhi_ble_has_voice_control();
+const char *xingzhi_ble_take_voice_control();
 bool xingzhi_ble_hid_available();
 bool xingzhi_ble_set_battery_level(int level);
 int xingzhi_ble_battery_level();

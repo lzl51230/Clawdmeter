@@ -28,6 +28,11 @@ void test_debug_command_parser_accepts_known_commands() {
     TEST_ASSERT_EQUAL_STRING("exit", command.arg1);
     TEST_ASSERT_EQUAL_STRING("long_press", command.arg2);
 
+    command = xingzhi_debug_parse_command("XDBG BUTTON voice long_press");
+    TEST_ASSERT_EQUAL(XingzhiDebugCommandType::Button, command.type);
+    TEST_ASSERT_EQUAL_STRING("voice", command.arg1);
+    TEST_ASSERT_EQUAL_STRING("long_press", command.arg2);
+
     command = xingzhi_debug_parse_command("XDBG BLE reset");
     TEST_ASSERT_EQUAL(XingzhiDebugCommandType::Ble, command.type);
     TEST_ASSERT_EQUAL_STRING("reset", command.arg1);
@@ -35,6 +40,10 @@ void test_debug_command_parser_accepts_known_commands() {
     command = xingzhi_debug_parse_command("XDBG PROBE imu");
     TEST_ASSERT_EQUAL(XingzhiDebugCommandType::Probe, command.type);
     TEST_ASSERT_EQUAL_STRING("imu", command.arg1);
+
+    command = xingzhi_debug_parse_command("XDBG PROBE audio");
+    TEST_ASSERT_EQUAL(XingzhiDebugCommandType::Probe, command.type);
+    TEST_ASSERT_EQUAL_STRING("audio", command.arg1);
 }
 
 void test_debug_command_parser_reports_unknown_commands() {
@@ -64,12 +73,31 @@ void test_status_line_is_bounded_and_parseable() {
     status.uptime_ms = 1234;
     status.framebuffer = "ready";
     status.detail = "allowed";
+    status.action = "voice";
+    status.event = "long_press";
+    status.action_count = 2;
+    status.voice = "recording";
+    status.voice_detail = "recording";
+    status.voice_ms = "1200";
+    status.audio = "recording";
+    status.audio_detail = "sampled";
+    status.audio_ms = "1180";
+    status.audio_samples = "18880";
+    status.audio_peak = "1024";
+    status.audio_rms = "128";
+    status.audio_bytes = "0";
+    status.audio_error = "";
+    status.voice_tx = "sending";
+    status.voice_tx_detail = "chunk";
+    status.voice_tx_bytes = "160/320";
+    status.voice_tx_chunks = "1/2";
+    status.voice_tx_error = "";
     status.splash = "idle breathe";
     status.splash_group = "idle";
     status.splash_category = "Idle";
     status.splash_frame = "0/16";
 
-    char line[720];
+    char line[1400];
     int written = xingzhi_debug_format_status(&status, line, sizeof(line));
 
     TEST_ASSERT_GREATER_THAN(0, written);
@@ -85,6 +113,22 @@ void test_status_line_is_bounded_and_parseable() {
     TEST_ASSERT_NOT_NULL(strstr(line, "hid_battery=80"));
     TEST_ASSERT_NOT_NULL(strstr(line, "power=valid"));
     TEST_ASSERT_NOT_NULL(strstr(line, "battery=80"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "action=voice"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "event=long_press"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "voice=recording"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "voice_detail=recording"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "voice_ms=1200"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "audio=recording"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "audio_detail=sampled"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "audio_ms=1180"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "audio_samples=18880"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "audio_peak=1024"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "audio_rms=128"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "audio_bytes=0"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "voice_tx=sending"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "voice_tx_detail=chunk"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "voice_tx_bytes=160/320"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "voice_tx_chunks=1/2"));
     TEST_ASSERT_NOT_NULL(strstr(line, "splash=idle_breathe"));
     TEST_ASSERT_NOT_NULL(strstr(line, "splash_group=idle"));
     TEST_ASSERT_NOT_NULL(strstr(line, "splash_category=Idle"));

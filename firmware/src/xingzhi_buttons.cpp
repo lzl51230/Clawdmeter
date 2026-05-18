@@ -17,7 +17,7 @@ struct PhysicalButton {
 
 PhysicalButton buttons[] = {
     {0, XingzhiAction::CycleScreen, {}},
-    {40, XingzhiAction::HidSpace, {}},
+    {40, XingzhiAction::VoiceInput, {}},
     {39, XingzhiAction::HidShiftTab, {}},
 };
 
@@ -50,7 +50,8 @@ XingzhiButtonEvent xingzhi_button_debounce_update(
     bool raw_pressed,
     uint32_t now_ms,
     uint32_t debounce_ms,
-    uint32_t long_press_ms
+    uint32_t long_press_ms,
+    bool report_release_after_long_press
 ) {
     XingzhiButtonEvent event = {};
     event.action = action;
@@ -78,7 +79,7 @@ XingzhiButtonEvent xingzhi_button_debounce_update(
             event.event = XingzhiActionEvent::Press;
         } else {
             state->stable_pressed_ms = 0;
-            if (!state->long_press_reported) {
+            if (!state->long_press_reported || report_release_after_long_press) {
                 event.active = true;
                 event.event = XingzhiActionEvent::Release;
             }
@@ -98,6 +99,10 @@ XingzhiButtonEvent xingzhi_button_debounce_update(
         event.event = XingzhiActionEvent::LongPress;
     }
     return event;
+}
+
+uint32_t long_press_ms_for(XingzhiAction action) {
+    return action == XingzhiAction::CycleScreen || action == XingzhiAction::VoiceInput ? LONG_PRESS_MS : 0;
 }
 
 void xingzhi_buttons_begin() {
@@ -121,7 +126,8 @@ bool xingzhi_buttons_poll(XingzhiButtonEvent *event, uint32_t now_ms) {
             read_pin_pressed(button.pin),
             now_ms,
             DEBOUNCE_MS,
-            button.action == XingzhiAction::CycleScreen ? LONG_PRESS_MS : 0
+            long_press_ms_for(button.action),
+            button.action == XingzhiAction::VoiceInput
         );
         if (next.active) {
             *event = next;

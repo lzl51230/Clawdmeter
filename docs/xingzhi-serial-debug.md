@@ -28,6 +28,7 @@ py -3 tools\xingzhi_debug.py status --port COM7
 BLE 阶段后，同一状态行还会包含 `ble=advertising|connected|disconnected|error`、`ble_name` 和 `ble_mac`。状态行字段按空格分隔，因此 `ble_name` 会将空格转为下划线，例如实际广播名 `Claude Controller` 会显示为 `Claude_Controller`。
 电源遥测阶段后，状态行还会包含 `power=valid|sampling|unavailable|error`、`battery`、`charging`、`adc=<avg>/<raw>` 和 `samples`。只有 `power=valid` 时，status 屏才会显示具体电量。
 Splash 动画阶段后，状态行还会包含 `splash`、`splash_group`、`splash_category` 和 `splash_frame`，便于截图前后确认动画和用量组变化。
+语音听写阶段后，状态行还会包含 `voice`、`voice_detail`、`voice_ms`、`audio_*` 和 `voice_tx_*` 字段。`voice=recording|sending|waiting_ack|done|error` 用于确认 GPIO40、麦克风、BLE voice 传输和 host 回写状态。
 
 ## 截图回读
 
@@ -108,6 +109,30 @@ py -3 tools\xingzhi_debug.py status --port COM7
 ```powershell
 py -3 -u tools\windows_claude_usage_ble.py --watch --require-ack --poll-interval 60 --retry-delay 5
 ```
+
+## BLE 语音与 ASR 验证
+
+GPIO40 当前是语音听写键：短按忽略，长按开始录音，松开后通过 BLE voice characteristic 上传 WAV。完整听写模式会调用硅基流动 ASR，并把文本粘贴到当前 Windows 焦点窗口。bat 入口默认启用 `--watch --receive-timeout 0`，会一直等待并连续处理多次 GPIO40 录音。先把焦点放到记事本或输入框，再启动 Windows voice helper：
+
+```powershell
+Set-Content .env "SILICONFLOW_API_KEY=sk-..."
+tools\watch_xingzhi_voice_dictation.bat --address 94:A9:90:1B:6D:FD
+py -3 tools\windows_xingzhi_voice_dictation.py --watch --receive-timeout 0 --address 94:A9:90:1B:6D:FD --output C:\Windows\Temp\voice.wav
+py -3 tools\xingzhi_debug.py button voice --event long_press --port COM7
+py -3 tools\xingzhi_debug.py button voice --event release --port COM7
+py -3 tools\xingzhi_debug.py status --port COM7
+```
+
+通过闸门：helper 输出 `Voice metadata`、`Voice complete`、`Saved WAV` 和 `Pasted transcript`；焦点窗口出现听写文本；串口状态显示 `voice=done`、`voice_tx=done`，`voice_tx_chunks=<n>/<n>`。
+
+排障模式可以只保存 WAV 或只验证硅基流动 `TeleAI/TeleSpeechASR` 转写，不粘贴文本：
+
+```powershell
+py -3 tools\windows_xingzhi_voice_dictation.py --dump-only --output C:\Windows\Temp\voice.wav
+py -3 tools\windows_xingzhi_voice_dictation.py --input-wav C:\Windows\Temp\voice.wav --asr-only
+```
+
+缺少 `.env` 或 `SILICONFLOW_API_KEY` 时，工具会在连接 BLE 前失败；错误日志不会打印密钥。
 
 ## 硬件能力探测
 

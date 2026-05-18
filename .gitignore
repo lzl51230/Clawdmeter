@@ -3,6 +3,7 @@ firmware/.pio/
 firmware/.vscode/
 backups/
 __pycache__/
+.env
 
 # OS
 .DS_Store

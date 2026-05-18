@@ -20,6 +20,9 @@ struct XingzhiUiState {
     const char *last_error = "";
     const char *last_action = "none";
     uint32_t action_count = 0;
+    const char *voice = "idle";
+    const char *voice_detail = "";
+    uint32_t voice_duration_ms = 0;
     bool power_valid = false;
     int battery_level = -1;
     bool charging = false;

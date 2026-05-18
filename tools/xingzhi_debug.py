@@ -239,7 +239,22 @@ def build_parser() -> argparse.ArgumentParser:
     button = subcommands.add_parser("button", help="Simulate a Xingzhi button action")
     button.add_argument(
         "button",
-        choices=["cycle", "screen", "1", "exit", "back", "splash_exit", "space", "2", "shift_tab", "shift-tab", "tab", "3"],
+        choices=[
+            "cycle",
+            "screen",
+            "1",
+            "exit",
+            "back",
+            "splash_exit",
+            "voice",
+            "dictate",
+            "dictation",
+            "2",
+            "shift_tab",
+            "shift-tab",
+            "tab",
+            "3",
+        ],
     )
     button.add_argument(
         "--event",
@@ -267,7 +282,7 @@ def build_parser() -> argparse.ArgumentParser:
     payload.add_argument("--settle-delay", type=float, default=0.4, help="Delay after opening the port")
 
     probe = subcommands.add_parser("probe", help="Probe optional hardware capabilities")
-    probe.add_argument("target", nargs="?", default="imu", help="Probe target, currently imu")
+    probe.add_argument("target", nargs="?", default="imu", help="Probe target: imu, audio, or mic")
     probe.add_argument("--port", default=DEFAULT_PORT, help="Serial port, for example COM7")
     probe.add_argument("--baud", type=int, default=DEFAULT_BAUD, help="Serial baud rate")
     probe.add_argument("--timeout", type=float, default=3.0, help="Serial read timeout in seconds")

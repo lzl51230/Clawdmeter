@@ -12,6 +12,8 @@ constexpr const char *SERVICE_UUID = "4c41555a-4465-7669-6365-000000000001";
 constexpr const char *RX_CHAR_UUID = "4c41555a-4465-7669-6365-000000000002";
 constexpr const char *TX_CHAR_UUID = "4c41555a-4465-7669-6365-000000000003";
 constexpr const char *REQ_CHAR_UUID = "4c41555a-4465-7669-6365-000000000004";
+constexpr const char *VOICE_CHAR_UUID = "4c41555a-4465-7669-6365-000000000005";
+constexpr const char *VOICE_CTRL_CHAR_UUID = "4c41555a-4465-7669-6365-000000000006";
 constexpr size_t BLE_BUF_SIZE = 512;
 
 const uint8_t HID_REPORT_MAP[] = {
@@ -46,15 +48,19 @@ NimBLEHIDDevice *hid_dev = nullptr;
 NimBLECharacteristic *input_kbd = nullptr;
 NimBLECharacteristic *tx_char = nullptr;
 NimBLECharacteristic *req_char = nullptr;
+NimBLECharacteristic *voice_char = nullptr;
 XingzhiBleState state = XingzhiBleState::Init;
 bool need_advertise = false;
 char rx_buf[BLE_BUF_SIZE] = {};
 char last_error[72] = {};
 char pending_error[72] = {};
+char voice_control_buf[72] = {};
 char mac_str[18] = {};
 volatile bool data_ready = false;
 volatile bool error_ready = false;
 volatile bool has_received_data = false;
+volatile bool voice_subscribed = false;
+volatile bool voice_control_ready = false;
 int hid_battery_level = 100;
 
 void copy_error(const char *message) {
@@ -126,6 +132,24 @@ class ReqCallbacks : public NimBLECharacteristicCallbacks {
     }
 };
 
+class VoiceCallbacks : public NimBLECharacteristicCallbacks {
+    void onSubscribe(NimBLECharacteristic *chr, NimBLEConnInfo &info, uint16_t subValue) override {
+        voice_subscribed = subValue != 0;
+        Serial.printf("Xingzhi BLE: voice subscribe=%u\n", subValue);
+    }
+};
+
+class VoiceControlCallbacks : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic *chr, NimBLEConnInfo &info) override {
+        std::string value = chr->getValue();
+        const size_t length = value.length();
+        const size_t copy_len = length < sizeof(voice_control_buf) - 1 ? length : sizeof(voice_control_buf) - 1;
+        memcpy(voice_control_buf, value.c_str(), copy_len);
+        voice_control_buf[copy_len] = '\0';
+        voice_control_ready = true;
+    }
+};
+
 }  // namespace
 
 void xingzhi_ble_init() {
@@ -174,6 +198,20 @@ void xingzhi_ble_init() {
     );
     static ReqCallbacks req_callbacks;
     req_char->setCallbacks(&req_callbacks);
+
+    voice_char = service->createCharacteristic(
+        VOICE_CHAR_UUID,
+        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
+    );
+    static VoiceCallbacks voice_callbacks;
+    voice_char->setCallbacks(&voice_callbacks);
+
+    NimBLECharacteristic *voice_control_char = service->createCharacteristic(
+        VOICE_CTRL_CHAR_UUID,
+        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
+    );
+    static VoiceControlCallbacks voice_control_callbacks;
+    voice_control_char->setCallbacks(&voice_control_callbacks);
 
     server->start();
     start_advertising();
@@ -268,6 +306,8 @@ bool xingzhi_ble_reset_pairing() {
 
     NimBLEDevice::deleteAllBonds();
     has_received_data = false;
+    voice_subscribed = false;
+    voice_control_ready = false;
     snprintf(last_error, sizeof(last_error), "");
     Serial.println("Xingzhi BLE: bonds cleared");
 
@@ -278,6 +318,33 @@ bool xingzhi_ble_reset_pairing() {
 
     need_advertise = true;
     return true;
+}
+
+bool xingzhi_ble_voice_subscribed() {
+    return state == XingzhiBleState::Connected && voice_char != nullptr && voice_subscribed;
+}
+
+bool xingzhi_ble_voice_notify(const uint8_t *data, size_t len) {
+    if (!data || len == 0) {
+        copy_error("voice_empty_notify");
+        return false;
+    }
+    if (!xingzhi_ble_voice_subscribed()) {
+        copy_error("voice_not_subscribed");
+        return false;
+    }
+    voice_char->setValue(const_cast<uint8_t *>(data), len);
+    voice_char->notify();
+    return true;
+}
+
+bool xingzhi_ble_has_voice_control() {
+    return voice_control_ready;
+}
+
+const char *xingzhi_ble_take_voice_control() {
+    voice_control_ready = false;
+    return voice_control_buf;
 }
 
 bool xingzhi_ble_hid_available() {

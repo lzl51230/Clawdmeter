@@ -26,7 +26,8 @@ XingzhiButtonEvent xingzhi_button_debounce_update(
     bool raw_pressed,
     uint32_t now_ms,
     uint32_t debounce_ms,
-    uint32_t long_press_ms = 0
+    uint32_t long_press_ms = 0,
+    bool report_release_after_long_press = false
 );
 
 void xingzhi_buttons_begin();

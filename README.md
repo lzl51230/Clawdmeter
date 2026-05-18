@@ -5,8 +5,8 @@ A small ESP32 dashboard for keeping an eye on Claude Code or Codex usage.
 This fork is adapted for the Xiaozhi/Xingzhi `xingzhi-cube-1.54tft-wifi`
 device. It pairs with a Windows host over Bluetooth, shows usage on the 240×240
 ST7789 screen, and plays pixel-art Clawd animations that get busier when your
-usage rate climbs. The physical buttons send Space and Shift+Tab over BLE HID
-for Claude Code voice mode and mode-toggle shortcuts.
+usage rate climbs. GPIO40 is being adapted as a push-to-talk voice dictation
+button, while GPIO39 still sends Shift+Tab over BLE HID.
 
 |              Usage meter              |              Clawd animation screen              |
 | :-----------------------------------: | :----------------------------------------------: |
@@ -39,8 +39,8 @@ so a long stretch on the splash isn't just one Clawd on loop.
 - The current board profile uses the Xiaozhi ST7789 wiring: SDA GPIO10, SCL
   GPIO9, DC GPIO8, CS GPIO14, RES GPIO18, and BACKLIGHT GPIO13.
 - The current parity firmware uses GPIO0 for UI cycle/splash control, GPIO40
-  for Space, GPIO39 for Shift+Tab, GPIO38 for charge-state sensing, and ADC2
-  channel 6 for battery voltage telemetry.
+  for voice dictation, GPIO39 for Shift+Tab, GPIO38 for charge-state sensing,
+  and ADC2 channel 6 for battery voltage telemetry.
 - The original [Waveshare ESP32-S3-Touch-AMOLED-2.16](https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-2.16)
   target remains in the repository as the upstream/default hardware target.
 
@@ -89,6 +89,19 @@ py -3 tools\windows_claude_usage_ble.py --dry-run
 py -3 tools\windows_claude_usage_ble.py --require-ack
 py -3 tools\windows_claude_usage_ble.py --usage-source claude --require-ack
 py -3 tools\xingzhi_debug.py screenshot --port COM7 --output usage.bmp
+```
+
+Voice dictation uses a separate helper. Store `SILICONFLOW_API_KEY=...` in a
+local `.env` file for SiliconFlow `TeleAI/TeleSpeechASR` transcription; `.env`
+is ignored by git. The bat entry runs in `--watch` mode, waits indefinitely for
+GPIO40 uploads, and pastes recognized text into the current Windows focus
+window by default.
+
+```powershell
+tools\watch_xingzhi_voice_dictation.bat --address 94:A9:90:1B:6D:FD
+py -3 tools\windows_xingzhi_voice_dictation.py --watch --receive-timeout 0 --address 94:A9:90:1B:6D:FD --output C:\Windows\Temp\voice.wav
+py -3 tools\windows_xingzhi_voice_dictation.py --dump-only --output voice.wav
+py -3 tools\windows_xingzhi_voice_dictation.py --input-wav voice.wav --asr-only
 ```
 
 The current Xingzhi 1.54 WiFi board has no confirmed IMU configuration in the
@@ -161,20 +174,22 @@ with `--poll-interval`.
    the Xingzhi usage header shows `Codex`; missing or unknown `src` defaults to
    `Claude` for backward compatibility.
 6. The firmware also tracks the rate of change of session % over a 5-minute window and picks splash animations from the matching mood group.
-7. The side buttons are independent of all of this — they send Space and Shift+Tab as BLE HID keyboard input to the paired host directly.
+7. GPIO40 records Xingzhi microphone audio for the voice helper; GPIO39 sends
+   Shift+Tab as a BLE HID keyboard input to the paired host.
 
 ## Physical buttons
 
-The Xingzhi parity target maps the three hardware buttons to UI and BLE HID
+The Xingzhi parity target maps the three hardware buttons to UI, voice, and HID
 actions:
 
 | Button       | GPIO   | Function                                                    |
 | ------------ | ------ | ----------------------------------------------------------- |
 | **UI**       | GPIO 0 | Cycle Usage/Status/Splash; on splash, short press advances animation and long press exits splash |
-| **Space**    | GPIO40 | Send Space as BLE HID keyboard input                        |
+| **Voice**    | GPIO40 | Long press records microphone audio for BLE voice dictation; short press is ignored |
 | **Shift+Tab** | GPIO39 | Send Shift+Tab as BLE HID keyboard input                    |
 
-Space and Shift+Tab go out as standard BLE HID keyboard reports, so they trigger in whatever window has focus on the paired host — not just Claude Code.
+Shift+Tab goes out as a standard BLE HID keyboard report, so it triggers in
+whatever window has focus on the paired host.
 
 ## BLE protocol
 
@@ -186,6 +201,8 @@ The device advertises a custom GATT service alongside the standard HID keyboard 
 | RX Characteristic (write)  | `4c41555a-4465-7669-6365-000000000002` |
 | TX Characteristic (notify) | `4c41555a-4465-7669-6365-000000000003` |
 | REQ Characteristic (notify) | `4c41555a-4465-7669-6365-000000000004` |
+| Voice Characteristic (notify) | `4c41555a-4465-7669-6365-000000000005` |
+| Voice Control Characteristic (write) | `4c41555a-4465-7669-6365-000000000006` |
 | **HID Service**            | `00001812-0000-1000-8000-00805f9b34fb` |
 
 JSON payload format (written to RX):

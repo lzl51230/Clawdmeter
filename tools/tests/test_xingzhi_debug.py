@@ -165,6 +165,25 @@ class XingzhiDebugToolTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(serial_port.writes[0], b"XDBG BUTTON exit long_press\n")
 
+    def test_button_command_accepts_voice_long_press(self):
+        serial_port = FakeSerial("COM9", 115200)
+        serial_port.read_buffer.extend(
+            b"XDBG ACTION ok=1 action=voice event=long_press screen=usage count=2 message=recording\n"
+        )
+        stdout = io.StringIO()
+
+        code = xingzhi_debug.run(
+            ["button", "voice", "--event", "long_press", "--port", "COM9"],
+            stdout=stdout,
+            stderr=io.StringIO(),
+            serial_factory=lambda *args, **kwargs: serial_port,
+            sleep_fn=lambda _: None,
+        )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(serial_port.writes[0], b"XDBG BUTTON voice long_press\n")
+        self.assertIn("action=voice", stdout.getvalue())
+
     def test_ble_reset_command_writes_recovery_command(self):
         serial_port = FakeSerial("COM9", 115200)
         serial_port.read_buffer.extend(
@@ -237,6 +256,28 @@ class XingzhiDebugToolTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(serial_port.writes[0], b"XDBG PROBE imu\n")
         self.assertIn("status=not_available", stdout.getvalue())
+
+    def test_probe_command_accepts_audio_target(self):
+        serial_port = FakeSerial("COM9", 115200)
+        serial_port.read_buffer.extend(
+            b"XDBG PROBE target=xingzhi_parity probe=audio ok=1 "
+            b"status=ready method=i2s_std_16k_mono "
+            b"detail=ws4_sck5_din6_cap320044 checked=ms0_s0_p0_r0_t0\n"
+        )
+        stdout = io.StringIO()
+
+        code = xingzhi_debug.run(
+            ["probe", "audio", "--port", "COM9"],
+            stdout=stdout,
+            stderr=io.StringIO(),
+            serial_factory=lambda *args, **kwargs: serial_port,
+            sleep_fn=lambda _: None,
+        )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(serial_port.writes[0], b"XDBG PROBE audio\n")
+        self.assertIn("probe=audio", stdout.getvalue())
+        self.assertIn("method=i2s_std_16k_mono", stdout.getvalue())
 
 
 if __name__ == "__main__":
