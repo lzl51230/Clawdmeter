@@ -239,6 +239,62 @@ class WindowsClaudeUsageBleTest(unittest.TestCase):
         self.assertEqual(payload["st"], "allowed")
         self.assertEqual(payload["src"], "codex")
 
+    def test_codex_wsl_dry_run_prefers_default_codex_limit_over_newer_spark_limit(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            codex_home = Path(tmpdir)
+            session = codex_home / "sessions" / "2026" / "05" / "18" / "rollout.jsonl"
+            session.parent.mkdir(parents=True)
+            session.write_text(
+                "\n".join(
+                    [
+                        json.dumps(
+                            {
+                                "timestamp": "2026-05-18T07:10:39.964Z",
+                                "type": "event_msg",
+                                "payload": {
+                                    "type": "token_count",
+                                    "rate_limits": {
+                                        "limit_id": "codex",
+                                        "primary": {"used_percent": 4, "resets_at": 1300},
+                                        "secondary": {"used_percent": 3, "resets_at": 4600},
+                                    },
+                                },
+                            }
+                        ),
+                        json.dumps(
+                            {
+                                "timestamp": "2026-05-18T07:10:39.965Z",
+                                "type": "event_msg",
+                                "payload": {
+                                    "type": "token_count",
+                                    "rate_limits": {
+                                        "limit_id": "codex_bengalfox",
+                                        "limit_name": "GPT-5.3-Codex-Spark",
+                                        "primary": {"used_percent": 0, "resets_at": 3100},
+                                        "secondary": {"used_percent": 0, "resets_at": 604800},
+                                    },
+                                },
+                            }
+                        ),
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            code = ble_tool.run(
+                ["--codex-home", str(codex_home), "--dry-run"],
+                stdout=stdout,
+                stderr=io.StringIO(),
+                now_fn=lambda: 1000,
+                bleak_loader=lambda: (_ for _ in ()).throw(AssertionError("should not import bleak")),
+            )
+
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue().split("Payload: ", 1)[1])
+        self.assertEqual(payload["s"], 4)
+        self.assertEqual(payload["w"], 3)
+
     def test_read_access_token_finds_nested_token(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             credentials = Path(tmpdir) / "credentials.json"

@@ -91,13 +91,23 @@ py -3 tools\windows_claude_usage_ble.py --usage-source claude --require-ack
 py -3 tools\xingzhi_debug.py screenshot --port COM7 --output usage.bmp
 ```
 
-Voice dictation uses a separate helper. Store `SILICONFLOW_API_KEY=...` in a
-local `.env` file for SiliconFlow `TeleAI/TeleSpeechASR` transcription; `.env`
-is ignored by git. The bat entry runs in `--watch` mode, waits indefinitely for
-GPIO40 uploads, and pastes recognized text into the current Windows focus
-window by default.
+For daily Windows use, run the combined watcher so Codex usage and GPIO40 voice
+dictation share one BLE connection. Store `SILICONFLOW_API_KEY=...` in a local
+`.env` file for SiliconFlow `TeleAI/TeleSpeechASR` transcription; `.env` is
+ignored by git. The combined watcher keeps usage polling in a separate asyncio
+task while voice waits for uploads, so usage still refreshes while no recording
+is active.
 
 ```powershell
+tools\watch_xingzhi_combined.bat --address 94:A9:90:1B:6D:FD
+```
+
+The single-purpose watchers remain useful for debugging, but do not run
+`watch_codex_wsl.bat` and `watch_xingzhi_voice_dictation.bat` at the same time;
+the Xingzhi BLE peripheral is treated as a single host connection.
+
+```powershell
+tools\watch_codex_wsl.bat --address 94:A9:90:1B:6D:FD
 tools\watch_xingzhi_voice_dictation.bat --address 94:A9:90:1B:6D:FD
 py -3 tools\windows_xingzhi_voice_dictation.py --watch --receive-timeout 0 --address 94:A9:90:1B:6D:FD --output C:\Windows\Temp\voice.wav
 py -3 tools\windows_xingzhi_voice_dictation.py --dump-only --output voice.wav

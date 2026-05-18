@@ -39,6 +39,7 @@ REQ_CHAR_UUID = "4c41555a-4465-7669-6365-000000000004"
 CLAUDE_MESSAGES_URL = "https://api.anthropic.com/v1/messages"
 DEFAULT_CREDENTIALS = Path.home() / ".claude" / ".credentials.json"
 DEFAULT_CODEX_SESSION_FILE_LIMIT = 200
+DEFAULT_CODEX_LIMIT_ID = "codex"
 
 PRESETS = {
     "normal": {"s": 42, "sr": 37, "w": 28, "wr": 720, "st": "allowed", "ok": True},
@@ -269,9 +270,16 @@ def _codex_rate_limits_from_event(event: Mapping[str, Any]) -> Mapping[str, Any]
     return None
 
 
-def read_latest_codex_rate_limits(codex_home: Path, max_files: int = DEFAULT_CODEX_SESSION_FILE_LIMIT) -> Mapping[str, Any]:
+def read_latest_codex_rate_limits(
+    codex_home: Path,
+    max_files: int = DEFAULT_CODEX_SESSION_FILE_LIMIT,
+    limit_id: str | None = DEFAULT_CODEX_LIMIT_ID,
+) -> Mapping[str, Any]:
     best_timestamp = ""
     best_rate_limits: Mapping[str, Any] | None = None
+    fallback_timestamp = ""
+    fallback_rate_limits: Mapping[str, Any] | None = None
+    match_any_limit = not limit_id or limit_id == "all"
     for path in _codex_session_files(codex_home, max_files):
         try:
             lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
@@ -287,13 +295,22 @@ def read_latest_codex_rate_limits(codex_home: Path, max_files: int = DEFAULT_COD
             if not rate_limits:
                 continue
             timestamp = str(event.get("timestamp", ""))
-            if not best_rate_limits or timestamp >= best_timestamp:
-                best_timestamp = timestamp
-                best_rate_limits = rate_limits
+            event_limit_id = rate_limits.get("limit_id")
+            if match_any_limit or str(event_limit_id) == limit_id:
+                if not best_rate_limits or timestamp >= best_timestamp:
+                    best_timestamp = timestamp
+                    best_rate_limits = rate_limits
+            elif event_limit_id is None:
+                if not fallback_rate_limits or timestamp >= fallback_timestamp:
+                    fallback_timestamp = timestamp
+                    fallback_rate_limits = rate_limits
 
-    if not best_rate_limits:
-        raise MissingCodexUsageError(f"Codex token_count rate limits not found under: {codex_home / 'sessions'}")
-    return best_rate_limits
+    if best_rate_limits:
+        return best_rate_limits
+    if fallback_rate_limits:
+        return fallback_rate_limits
+    limit_hint = "" if match_any_limit else f" for limit_id={limit_id}"
+    raise MissingCodexUsageError(f"Codex token_count rate limits{limit_hint} not found under: {codex_home / 'sessions'}")
 
 
 def poll_codex_wsl_usage(
@@ -301,9 +318,10 @@ def poll_codex_wsl_usage(
     now_fn: Callable[[], float] = time.time,
     max_session_files: int = DEFAULT_CODEX_SESSION_FILE_LIMIT,
     wsl_distro: str | None = None,
+    limit_id: str | None = DEFAULT_CODEX_LIMIT_ID,
 ) -> str:
     resolved_home = codex_home or resolve_default_codex_home(wsl_distro)
-    rate_limits = read_latest_codex_rate_limits(resolved_home, max_files=max_session_files)
+    rate_limits = read_latest_codex_rate_limits(resolved_home, max_files=max_session_files, limit_id=limit_id)
     return build_payload_from_codex_rate_limits(rate_limits, now=int(now_fn()))
 
 
@@ -447,6 +465,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--codex-home", type=Path, help="Codex home path for --usage-source codex-wsl")
     parser.add_argument("--codex-wsl-distro", help="WSL distro to query when auto-detecting Codex home on Windows")
     parser.add_argument(
+        "--codex-limit-id",
+        default=DEFAULT_CODEX_LIMIT_ID,
+        help="Codex rate limit id to read from token_count events; use 'all' to accept the newest limit",
+    )
+    parser.add_argument(
         "--codex-max-session-files",
         type=int,
         default=DEFAULT_CODEX_SESSION_FILE_LIMIT,
@@ -477,6 +500,7 @@ def run(
                 now_fn=now_fn,
                 max_session_files=args.codex_max_session_files,
                 wsl_distro=args.codex_wsl_distro,
+                limit_id=args.codex_limit_id,
             )
         raise ValueError(f"Unknown usage source: {args.usage_source}")
 

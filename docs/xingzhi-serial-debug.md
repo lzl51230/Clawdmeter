@@ -104,7 +104,7 @@ py -3 tools\xingzhi_debug.py ble reset --port COM7
 py -3 tools\xingzhi_debug.py status --port COM7
 ```
 
-`watch` 长期运行模式用于日常观察；扫描、连接、通知、写入、ack/nack 或 polling 失败会按 `--retry-delay` 重试：
+`watch` 长期运行模式用于 usage 单功能调试；扫描、连接、通知、写入、ack/nack 或 polling 失败会按 `--retry-delay` 重试：
 
 ```powershell
 py -3 -u tools\windows_claude_usage_ble.py --watch --require-ack --poll-interval 60 --retry-delay 5
@@ -112,10 +112,19 @@ py -3 -u tools\windows_claude_usage_ble.py --watch --require-ack --poll-interval
 
 ## BLE 语音与 ASR 验证
 
-GPIO40 当前是语音听写键：短按忽略，长按开始录音，松开后通过 BLE voice characteristic 上传 WAV。完整听写模式会调用硅基流动 ASR，并把文本粘贴到当前 Windows 焦点窗口。bat 入口默认启用 `--watch --receive-timeout 0`，会一直等待并连续处理多次 GPIO40 录音。先把焦点放到记事本或输入框，再启动 Windows voice helper：
+GPIO40 当前是语音听写键：短按忽略，长按开始录音，松开后通过 BLE voice characteristic 上传 WAV。日常使用应启动 combined watcher，让 Codex usage 和语音听写共用一个 BLE 连接；usage polling 和 voice receive 分别运行在独立 asyncio task 中，因此 voice 长时间等待时 usage 仍会按 `--poll-interval` 或设备 `REQ` 刷新。完整听写模式会调用硅基流动 ASR，并把文本粘贴到当前 Windows 焦点窗口。先把焦点放到记事本或输入框，再启动：
 
 ```powershell
 Set-Content .env "SILICONFLOW_API_KEY=sk-..."
+tools\watch_xingzhi_combined.bat --address 94:A9:90:1B:6D:FD
+py -3 tools\xingzhi_debug.py button voice --event long_press --port COM7
+py -3 tools\xingzhi_debug.py button voice --event release --port COM7
+py -3 tools\xingzhi_debug.py status --port COM7
+```
+
+`watch_codex_wsl.bat` 和 `watch_xingzhi_voice_dictation.bat` 保留为单功能排障入口，但不要同时运行；两个进程会争用同一个 Xingzhi BLE 外设连接。需要单独排查 voice 时再启动 voice helper：
+
+```powershell
 tools\watch_xingzhi_voice_dictation.bat --address 94:A9:90:1B:6D:FD
 py -3 tools\windows_xingzhi_voice_dictation.py --watch --receive-timeout 0 --address 94:A9:90:1B:6D:FD --output C:\Windows\Temp\voice.wav
 py -3 tools\xingzhi_debug.py button voice --event long_press --port COM7
