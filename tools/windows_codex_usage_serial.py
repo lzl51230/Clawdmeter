@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Send Windows-local Codex usage and settings to Xingzhi over USB serial."""
+"""Send local Codex usage and settings to Xingzhi over USB serial."""
 
 from __future__ import annotations
 
@@ -27,13 +27,20 @@ class SerialTarget:
         return (field, getattr(port, "vid", None), getattr(port, "pid", None), value)
 
     def resolve(self, ports) -> str | None:
-        if self.identity is None:
+        if self.identity is None and self.port == "auto":
+            candidates = [port for port in ports
+                          if port.device.startswith("/dev/cu.")
+                          and (getattr(port, "vid", None), getattr(port, "pid", None))
+                          == (0x303A, 0x1001)]
+        elif self.identity is None:
             candidates = [port for port in ports if port.device.casefold() == self.port.casefold()]
         else:
             candidates = [port for port in ports
                           if self.device_identity(port, self.identity[0]) == self.identity]
         if len(candidates) > 1:
-            raise OSError("Multiple serial ports match the device; waiting for a unique match")
+            names = ", ".join(sorted(port.device for port in candidates))
+            raise OSError(f"Multiple serial ports match the device: {names}; "
+                          "use --port to select one, or wait for a unique match")
         if not candidates:
             return None
         selected = candidates[0]
@@ -77,15 +84,16 @@ def send_snapshot(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--port", default="COM3")
+    parser.add_argument("--port", default="COM3",
+                        help="Serial port, or auto to discover a macOS ESP32-S3 USB port")
     parser.add_argument("--baud", type=int, default=115200)
     parser.add_argument("--timeout", type=float, default=3.0)
-    parser.add_argument("--codex-home", type=Path, help="Windows-local Codex home (never auto-selects WSL)")
+    parser.add_argument("--codex-home", type=Path, help="Local Codex home (never auto-selects WSL)")
     parser.add_argument("--codex-max-session-files", type=int, default=DEFAULT_CODEX_SESSION_FILE_LIMIT)
     parser.add_argument("--codex-limit-id", default="codex")
     parser.add_argument("--watch", action="store_true")
     parser.add_argument("--follow-device", action=argparse.BooleanOptionalAction, default=False,
-                        help="In watch mode, follow the same USB device when its COM port changes")
+                        help="In watch mode, follow the same USB device when its serial port changes")
     parser.add_argument("--poll-interval", type=float, default=60.0)
     parser.add_argument("--retry-delay", type=float, default=5.0)
     parser.add_argument("--dry-run", action="store_true", help="Print a snapshot without opening the serial port")
@@ -114,7 +122,8 @@ def run(
                 limit_id=args.codex_limit_id,
                 on_warning=lambda message: print(f"Warning: {message}", file=stderr, flush=True),
             )
-    target = SerialTarget(args.port) if args.watch and args.follow_device and not args.dry_run else None
+    follow_device = args.watch and args.follow_device
+    target = SerialTarget(args.port) if (follow_device or args.port == "auto") and not args.dry_run else None
     active_port = args.port
     next_update = 0.0
     try:
@@ -131,6 +140,8 @@ def run(
                         print(f"Serial port changed: {active_port} -> {selected_port}", file=stdout, flush=True)
                         active_port = selected_port
                         next_update = 0.0
+                    if not follow_device:
+                        target = None
                     remaining = next_update - monotonic_fn()
                     if remaining > 0:
                         sleep_fn(min(args.retry_delay, remaining))

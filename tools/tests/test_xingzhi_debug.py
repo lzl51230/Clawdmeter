@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 TOOL_PATH = Path(__file__).resolve().parents[1] / "xingzhi_debug.py"
@@ -56,6 +57,42 @@ class FakeSerial:
 
 
 class XingzhiDebugToolTest(unittest.TestCase):
+    def test_non_macos_keeps_original_serial_class(self):
+        for platform in ("win32", "linux"):
+            with self.subTest(platform=platform), patch.object(sys, "platform", platform):
+                self.assertIs(xingzhi_debug._serial_class(FakeSerial), FakeSerial)
+
+    @unittest.skipIf(sys.platform == "win32", "POSIX ioctl constants required")
+    def test_macos_control_lines_are_written_together_without_reset_transition(self):
+        import fcntl
+        import struct
+        import termios
+
+        class NativeSerial:
+            fd = 17
+            dtr = False
+            rts = False
+
+        for update in ("_update_dtr_state", "_update_rts_state"):
+            for dtr, rts in ((False, False), (True, False), (False, True), (True, True)):
+                with self.subTest(update=update, dtr=dtr, rts=rts):
+                    initial = termios.TIOCM_DTR | termios.TIOCM_RTS | termios.TIOCM_CTS
+                    with patch.object(sys, "platform", "darwin"), patch.object(
+                        fcntl, "ioctl", return_value=struct.pack("I", initial),
+                    ) as ioctl:
+                        connection = xingzhi_debug._serial_class(NativeSerial)()
+                        connection.dtr, connection.rts = dtr, rts
+                        getattr(connection, update)()
+
+                    expected = termios.TIOCM_CTS
+                    if dtr:
+                        expected |= termios.TIOCM_DTR
+                    if rts:
+                        expected |= termios.TIOCM_RTS
+                    self.assertEqual(ioctl.call_count, 2)
+                    ioctl.assert_any_call(17, termios.TIOCMGET, struct.pack("I", 0))
+                    ioctl.assert_called_with(17, termios.TIOCMSET, struct.pack("I", expected))
+
     def test_parse_status_line_extracts_key_values(self):
         status = xingzhi_debug.parse_status_line(
             "boot log\n"

@@ -121,7 +121,7 @@ class CodexSerialTest(unittest.TestCase):
         return SimpleNamespace(device=port, vid=0x303A, pid=0x1001,
                                serial_number=serial_number, location=location)
 
-    def run_follow_watch(self, port_sets, make_connection=None):
+    def run_follow_watch(self, port_sets, make_connection=None, extra_args=()):
         scans = iter(port_sets)
         clock = [0.0]
         attempts = []
@@ -157,7 +157,7 @@ class CodexSerialTest(unittest.TestCase):
             return payloads[-1]
 
         result = serial_tool.run(
-            ["--watch", "--follow-device"], stdout=output, stderr=errors,
+            ["--watch", "--follow-device", *extra_args], stdout=output, stderr=errors,
             serial_factory=factory, sleep_fn=sleep, payload_provider=payload_provider,
             port_provider=enumerate_ports, monotonic_fn=lambda: clock[0],
         )
@@ -165,6 +165,84 @@ class CodexSerialTest(unittest.TestCase):
         self.assertTrue(all(closed_at_wait))
         return SimpleNamespace(attempts=attempts, connections=connections,
                                payloads=payloads, output=output.getvalue(), errors=errors.getvalue())
+
+    def test_windows_defaults_remain_unchanged(self):
+        args = serial_tool.build_parser().parse_args([])
+        self.assertEqual((args.port, args.baud, args.poll_interval, args.retry_delay),
+                         ("COM3", 115200, 60, 5))
+
+    def test_auto_ignores_non_target_ports_and_tty_alias(self):
+        target = self.device("/dev/cu.usbmodem1")
+        wrong_vendor = self.device("/dev/cu.usbserial1")
+        wrong_vendor.vid = 0x1234
+        wrong_product = self.device("/dev/cu.usbmodem2")
+        wrong_product.pid = 2
+        unknown_usb = SimpleNamespace(device="/dev/cu.Bluetooth-Incoming-Port")
+        ports = [wrong_vendor, wrong_product, unknown_usb, self.device("/dev/tty.usbmodem1")]
+        selection = serial_tool.SerialTarget("auto")
+        self.assertIsNone(selection.resolve(ports))
+        self.assertEqual(selection.resolve([*ports, target]), target.device)
+
+    def test_auto_lists_ambiguous_ports_without_binding_identity(self):
+        selection = serial_tool.SerialTarget("auto")
+        first, second = self.device("/dev/cu.usbmodem1"), self.device("/dev/cu.usbmodem2")
+        with self.assertRaisesRegex(OSError, "/dev/cu.usbmodem1, /dev/cu.usbmodem2.*--port"):
+            selection.resolve([second, first])
+        self.assertIsNone(selection.identity)
+        self.assertEqual(selection.resolve([second]), second.device)
+
+    def test_auto_waits_then_follows_same_device_after_port_change(self):
+        first = self.device("/dev/cu.usbmodem1")
+        other = self.device(first.device, serial_number="other")
+        changed = self.device("/dev/cu.usbmodem2")
+        result = self.run_follow_watch(
+            [[], [first], [], [other, changed]], extra_args=["--port", "auto"],
+        )
+        self.assertEqual(result.attempts, [(5.0, first.device), (15.4, changed.device)])
+        self.assertNotEqual(result.payloads[0], result.payloads[1])
+
+    def test_auto_without_follow_resolves_once_and_keeps_port(self):
+        first = self.device("/dev/cu.usbmodem1")
+
+        def connect(attempt):
+            if attempt == 3:
+                raise KeyboardInterrupt()
+            return FakeSerial()
+
+        result = self.run_follow_watch(
+            [[first]], make_connection=connect,
+            extra_args=["--port", "auto", "--no-follow-device"],
+        )
+        self.assertEqual([port for _, port in result.attempts], [first.device] * 3)
+        self.assertAlmostEqual(result.attempts[1][0], 60.4)
+
+    def test_auto_single_update_and_no_device_failure(self):
+        for ports, expected_result in (([self.device("/dev/cu.usbmodem1")], 0), ([], 1)):
+            with self.subTest(ports=ports):
+                opened = []
+
+                def factory(port, *args, **kwargs):
+                    opened.append(port)
+                    return FakeSerial()
+
+                result = serial_tool.run(
+                    ["--port", "auto"], stdout=io.StringIO(), stderr=io.StringIO(),
+                    payload_provider=lambda: PAYLOAD, port_provider=lambda: ports,
+                    serial_factory=factory, sleep_fn=lambda _: None,
+                )
+                self.assertEqual(result, expected_result)
+                self.assertEqual(opened, [port.device for port in ports])
+
+    def test_auto_dry_run_never_enumerates_or_opens_port(self):
+        def unexpected(*args, **kwargs):
+            self.fail("Dry run touched the serial device")
+
+        result = serial_tool.run(
+            ["--port", "auto", "--watch", "--follow-device", "--dry-run"],
+            stdout=io.StringIO(), payload_provider=lambda: PAYLOAD,
+            port_provider=unexpected, serial_factory=unexpected,
+        )
+        self.assertEqual(result, 0)
 
     def test_follow_waits_for_device_at_start(self):
         result = self.run_follow_watch([[], [], [self.device()]])

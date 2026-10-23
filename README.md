@@ -19,6 +19,8 @@ The Clawd animations come from [claudepix](https://claudepix.vercel.app), [@amaa
 Windows 本机用量与模型状态可通过 USB 串口同步。连接设备后运行
 `codexWatch.bat`；默认端口为 `COM3`、波特率为 `115200`，每 60 秒刷新。
 可以执行 `codexWatch.bat --port COM7 --poll-interval 30` 覆盖参数。
+macOS 用户双击根目录的 `codexWatch.command`，自动识别 USB 设备；安装要求和参数见下方
+[macOS 支持](#macos-支持)。
 设备拔出后程序会持续等待，每 5 秒检查一次；检测到重新插入后立即读取并发送最新数据。
 首次从指定端口识别设备后，会按 USB 序列号跟随同一设备，即使 COM 端口号改变也能恢复。
 没有序列号时使用 USB 位置匹配；两者都不可用时仅等待原端口。匹配到多个设备时继续等待，
@@ -149,11 +151,35 @@ rotation remains disabled for this target.
 - For Xingzhi on Windows: Python 3 with `bleak`, `pyserial`, and `esptool`; WSL
   Codex usage uses `~/.codex/sessions/**/*.jsonl` by default
 
-## MacOS support
+## macOS 支持
 
-MacOS is fully supported, that is as soon as you prompt it and create a pull request for it!
+macOS 支持通过 USB 串口将本机 Codex 用量和模型配置同步到 Xingzhi parity 设备。
+需要 Python 3.11+ 和 `pyserial`，可在本机 Python 环境中一次性安装：
 
-I run Linux myself so it's harder for me to test this but anyone who wants MacOS support is welcome to contribute.
+```bash
+python3 -m pip install --user pyserial
+# Homebrew Python 如果提示 externally-managed-environment：
+python3 -m pip install --user --break-system-packages pyserial
+```
+
+连接设备后，在 Finder 中双击根目录的 **`codexWatch.command`**。终端会持续显示同步日志，
+默认每 60 秒刷新、断线后每 5 秒重试，按 **Ctrl+C** 停止。该入口支持 Apple Silicon
+和 Intel Homebrew 的常见 Python 安装位置，不创建虚拟环境或登录自启任务。
+
+默认从 `/dev/cu.*` 中识别 USB VID/PID 为 `303A:1001` 的 ESP32-S3 设备；没有设备时等待，
+多个候选时列出端口并等待唯一匹配，不任意选择。首次识别后按 USB 序列号跟随同一设备；
+无序列号则按 USB 位置匹配，都不可用时只等待原端口。也可以在终端覆盖参数：
+
+```bash
+./codexWatch.command --port /dev/cu.usbmodemXXXX --poll-interval 30
+./codexWatch.command --codex-home "$HOME/.codex" --retry-delay 2
+./codexWatch.command --dry-run
+```
+
+读取本机 `CODEX_HOME`，未设置时使用 `~/.codex`。`--no-follow-device` 可关闭设备跟随，
+自动识别模式下会固定使用首次选中的端口。每次同步后释放串口，刷机前先停止 watcher。
+如果下载或解压方式丢失执行权限，运行 `chmod +x codexWatch.command` 后再双击。
+本节覆盖 USB Codex 同步；下文的 `systemctl` 和 BlueZ 安装流程仍是 Linux 专用。
 
 ## Flash the firmware
 

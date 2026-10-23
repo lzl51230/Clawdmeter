@@ -1,10 +1,28 @@
 # Xingzhi 串口调试
 
-## Windows 本机 Codex 串口同步
+## 本机 Codex 串口同步（Windows / macOS）
 
 运行仓库根目录的 `codexWatch.bat`，默认通过 `COM3`、115200 波特率同步
 Windows 本机 Codex，每 60 秒刷新一次。使用 `codexWatch.bat --port COM7`
 覆盖端口，或用 `--codex-home` 指定数据目录；此入口不会自动查询 WSL。
+
+macOS 安装 Python 3.11+ 和 `pyserial` 后，双击根目录的 `codexWatch.command`。
+它默认自动匹配 `/dev/cu.*` 中 VID/PID 为 `303A:1001` 的设备，多个候选时列出端口并等待，
+可用 `./codexWatch.command --port /dev/cu.usbmodemXXXX` 指定。默认同样每 60 秒同步、
+每 5 秒重试，按 Ctrl+C 停止；首次绑定后支持设备端口变化时重新连接。
+读取 `CODEX_HOME` 或 `~/.codex`，不需要 WSL。依赖安装和参数示例见
+[README 的 macOS 支持](../README.md#macos-支持)。
+
+macOS 串口层以一次 ioctl 同时更新 DTR/RTS，避免 pyserial 逐路更新产生瞬间复位组合，
+使每次同步释放串口后、再次查询状态或截图时仍保留设备画面。
+控制线行为参考 [Espressif 的原子 DTR/RTS 设置说明](https://github.com/espressif/esp-pylib/blob/master/esp_pylib/serial_reset.py)。
+
+2026-10-23 macOS Apple Silicon 验证：115 项 Python 测试通过；通过 macOS 文件关联打开
+`codexWatch.command` 后，终端成功自动识别设备并同步本机 Codex。状态回读确认
+`source=serial`、`payload=valid`，截图确认模型、思考强度、速度档位和用量正常显示。
+连续三次关闭再打开串口后运行时间保持递增、数据保留，BLE/HID 仍连接；Ctrl+C 正常退出。
+截图保存在忽略目录 `backups/`。物理拔插恢复已覆盖自动化模拟，实机拔插及 Intel Mac
+仍待人工验证。
 
 主画面始终显示 `Codex`，并显示 `DEFAULT`、`PLAN`、`FAST` 和两项用量。
 Plan 当前继承默认模型，`plan_mode_reasoning_effort` 不作为模型名读取。

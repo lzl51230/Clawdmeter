@@ -59,13 +59,38 @@ def parse_screenshot_start(line: str) -> ScreenshotMetadata:
         raise ValueError(f"Missing screenshot metadata field: {exc.args[0]}") from exc
 
 
+def _serial_class(base_class):
+    if sys.platform != "darwin":
+        return base_class
+
+    import fcntl
+    import termios
+
+    class MacOSSerial(base_class):
+        def _update_dtr_state(self):
+            # macOS 打开端口后两路控制线可能已置位；逐路清除会触发 ESP32-S3 复位。
+            # 同一次 ioctl 写入 DTR/RTS，保留其他控制位，也覆盖 pyserial.open 内的更新。
+            bits = struct.unpack("I", fcntl.ioctl(self.fd, termios.TIOCMGET, struct.pack("I", 0)))[0]
+            bits &= ~(termios.TIOCM_DTR | termios.TIOCM_RTS)
+            if self.dtr:
+                bits |= termios.TIOCM_DTR
+            if self.rts:
+                bits |= termios.TIOCM_RTS
+            fcntl.ioctl(self.fd, termios.TIOCMSET, struct.pack("I", bits))
+
+        _update_rts_state = _update_dtr_state
+
+    return MacOSSerial
+
+
 def open_serial(port: str, baud: int, timeout: float, serial_factory: Callable | None = None):
     if serial_factory is None:
         try:
             import serial
         except ImportError as exc:
-            raise RuntimeError("pyserial is required. Install it with: py -3 -m pip install pyserial") from exc
-        serial_port = serial.Serial()
+            command = "py -3" if sys.platform == "win32" else "python3"
+            raise RuntimeError(f"pyserial is required. Install it with: {command} -m pip install pyserial") from exc
+        serial_port = _serial_class(serial.Serial)()
         serial_port.port = port
         serial_port.baudrate = baud
         serial_port.timeout = timeout
