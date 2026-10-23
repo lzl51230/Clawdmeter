@@ -122,6 +122,7 @@ void log_config() {
 }  // namespace
 
 void setup() {
+    Serial.setRxBufferSize(UsageLineReader::kCapacity * 2);
     Serial.begin(115200);
     delay(800);
 

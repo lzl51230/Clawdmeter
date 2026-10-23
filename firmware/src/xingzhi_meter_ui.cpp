@@ -217,6 +217,10 @@ void draw_usage_screen(
         const CodexSettings *config = state->codex_settings;
         const char *model = config && config->model[0] ? config->model : "--";
         const char *plan = config && config->plan_model[0] ? config->plan_model : "--";
+        char model_label[26];
+        char plan_label[26];
+        format_model_with_effort(model, config ? config->reasoning_effort : nullptr, model_label, sizeof(model_label));
+        format_model_with_effort(plan, config ? config->plan_reasoning_effort : nullptr, plan_label, sizeof(plan_label));
         const char *tier = config ? config->service_tier : "";
         const char *speed = "--";
         if (strcmp(tier, "fast") == 0 || strcmp(tier, "priority") == 0) {
@@ -227,9 +231,9 @@ void draw_usage_screen(
             speed = "OFF";
         }
         draw_text(display, 18, 43, "DEFAULT", COLOR_DIM);
-        draw_clipped_text(display, 72, 43, model, COLOR_TEXT, 25);
+        draw_text(display, 72, 43, model_label, COLOR_TEXT);
         draw_text(display, 18, 59, "PLAN", COLOR_DIM);
-        draw_clipped_text(display, 72, 59, plan, COLOR_TEXT, 25);
+        draw_text(display, 72, 59, plan_label, COLOR_TEXT);
         draw_text(display, 18, 75, "FAST", COLOR_DIM);
         draw_text(display, 72, 75, speed, strcmp(speed, "--") == 0 ? COLOR_DIM : COLOR_TEXT);
         display->drawFastHLine(16, 92, 208, COLOR_PANEL);

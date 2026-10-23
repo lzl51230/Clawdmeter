@@ -38,22 +38,29 @@ class CodexLocalUsageTest(unittest.TestCase):
             self.assertEqual(usage.resolve_local_codex_home(), self.home / ".codex")
 
     def test_settings_and_usage_share_snapshot(self):
-        self.config('model = "gpt-6.1-sol"\nservice_tier = "ultrafast"\nplan_mode_reasoning_effort = "xhigh"\n')
+        self.config('model = "gpt-6.1-sol"\nservice_tier = "ultrafast"\nmodel_reasoning_effort = "high"\nplan_mode_reasoning_effort = "xhigh"\n')
         self.event()
         payload = json.loads(usage.poll_codex_local_usage(self.home))
         self.assertEqual(payload["s"], 23)
         self.assertEqual(payload["w"], 42)
-        self.assertEqual(payload["cfg"], {"model": "gpt-6.1-sol", "plan_model": "gpt-6.1-sol", "service_tier": "ultrafast"})
+        self.assertEqual(payload["cfg"], {
+            "model": "gpt-6.1-sol", "plan_model": "gpt-6.1-sol", "service_tier": "ultrafast",
+            "reasoning_effort": "high", "plan_reasoning_effort": "xhigh",
+        })
 
     def test_config_refresh_and_profile_overrides(self):
-        self.config('model="old"\nprofile="work"\n[profiles.work]\nmodel="new"\nservice_tier="fast"\n')
+        self.config('model="old"\nmodel_reasoning_effort="low"\nplan_mode_reasoning_effort="high"\nprofile="work"\n[profiles.work]\nmodel="new"\nservice_tier="fast"\nmodel_reasoning_effort="medium"\nplan_mode_reasoning_effort="xhigh"\n')
         first = usage.read_codex_settings(self.home)
         self.assertEqual(first["model"], "new")
         self.assertEqual(first["plan_model"], "new")
         self.assertEqual(first["service_tier"], "fast")
+        self.assertEqual(first["reasoning_effort"], "medium")
+        self.assertEqual(first["plan_reasoning_effort"], "xhigh")
         self.config('model="changed"\n')
         self.assertEqual(usage.read_codex_settings(self.home)["model"], "changed")
         self.assertEqual(usage.read_codex_settings(self.home)["service_tier"], "default")
+        self.assertEqual(usage.read_codex_settings(self.home)["reasoning_effort"], "")
+        self.assertEqual(usage.read_codex_settings(self.home)["plan_reasoning_effort"], "")
 
     def test_all_speed_values_are_preserved(self):
         for tier in ("priority", "fast", "ultrafast", "default", "auto", "flex", "unexpected"):
@@ -78,16 +85,26 @@ class CodexLocalUsageTest(unittest.TestCase):
                 payload = json.loads(usage.poll_codex_local_usage(self.home, on_warning=warnings.append))
                 self.assertEqual(payload["s"], 23)
                 self.assertEqual(payload["cfg"]["service_tier"], "")
+                self.assertEqual(payload["cfg"]["reasoning_effort"], "")
+                self.assertEqual(payload["cfg"]["plan_reasoning_effort"], "")
                 self.assertTrue(warnings)
 
     def test_payload_and_model_lengths_are_bounded(self):
-        self.config('model="' + 'm' * 1000 + '"\nservice_tier="ultrafast"\n')
+        self.config('model="' + 'm' * 1000 + '"\nservice_tier="ultrafast"\nmodel_reasoning_effort="' + 'x' * 1000 + '"\nplan_mode_reasoning_effort="' + 'x' * 1000 + '"\n')
         self.event()
         payload = usage.poll_codex_local_usage(self.home)
         self.assertLess(len(payload.encode()), 512)
         self.assertEqual(len(json.loads(payload)["cfg"]["model"]), 63)
+        self.assertEqual(len(json.loads(payload)["cfg"]["reasoning_effort"]), 15)
+        self.assertEqual(len(json.loads(payload)["cfg"]["plan_reasoning_effort"]), 15)
         self.assertEqual(usage._display_token("bad name"), "")
         self.assertEqual(usage._display_token(1), "")
+
+    def test_missing_plan_effort_is_unknown_not_inherited(self):
+        self.config('model_reasoning_effort="high"\n')
+        settings = usage.read_codex_settings(self.home)
+        self.assertEqual(settings["reasoning_effort"], "high")
+        self.assertEqual(settings["plan_reasoning_effort"], "")
 
     def test_fractional_percentage_is_not_treated_as_fraction_of_100(self):
         payload = json.loads(usage.build_payload_from_codex_rate_limits({"primary": {"used_percent": 0.5}}))

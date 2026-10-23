@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 namespace {
 
@@ -58,6 +59,26 @@ void format_payload_state(MeterPayloadState state, char *buf, size_t len) {
     default:
         snprintf(buf, len, "Waiting for serial");
         break;
+    }
+}
+
+void format_model_with_effort(const char *model, const char *effort, char *buf, size_t len) {
+    if (!buf || len == 0) {
+        return;
+    }
+    const char *name = model && model[0] ? model : "--";
+    const char *strength = effort && effort[0] ? effort : "--";
+    char suffix[20];
+    snprintf(suffix, sizeof(suffix), " [%.15s]", strength);
+    const size_t suffix_len = strlen(suffix);
+    if (len <= suffix_len + 1) {
+        snprintf(buf, len, "%s", suffix + 1);
+        return;
+    }
+    const size_t model_width = len - suffix_len - 1;
+    snprintf(buf, len, "%.*s%s", static_cast<int>(model_width), name, suffix);
+    if (strlen(name) > model_width && model_width >= 3) {
+        memcpy(buf + model_width - 3, "...", 3);
     }
 }
 

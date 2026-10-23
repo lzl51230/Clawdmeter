@@ -8,20 +8,30 @@ Windows 本机 Codex，每 60 秒刷新一次。使用 `codexWatch.bat --port CO
 
 主画面始终显示 `Codex`，并显示 `DEFAULT`、`PLAN`、`FAST` 和两项用量。
 Plan 当前继承默认模型，`plan_mode_reasoning_effort` 不作为模型名读取。
+两条模型行分别显示 `model [reasoning_effort]`：DEFAULT 读取
+`model_reasoning_effort`，PLAN 读取 `plan_mode_reasoning_effort`，未配置时显示
+`[--]`。长模型名会省略，思考强度标签完整保留。
 Fast 的显示值为 `ON`、`OFF`、`ULTRAFAST` 或未知值 `--`。用量按日志中的
 `window_minutes` 分配到 SESSION（300 分钟）和 WEEKLY（10080 分钟）；缺失窗口
 显示 `--%`，而不是 0%。
 
-扩展 JSON 的可选 `cfg` 对象包含 `model`、`plan_model`、`service_tier`。
+扩展 JSON 的可选 `cfg` 对象包含 `model`、`plan_model`、`service_tier`，以及
+可选的 `reasoning_effort`、`plan_reasoning_effort`；`XDBG STATUS` 回传同名字段。
 仅发送 `cfg` 和 `src` 可更新模型状态而不覆盖已有用量。主机每次发送后查询
 `XDBG STATUS`，核对 `source=serial`、配置字段和用量接收状态，随后关闭串口。
 串口忙或断开后默认每 5 秒重试；刷机前用 Ctrl+C 退出 watcher。
+USB 接收缓冲为 1024 字节，JSON 行最多 511 字节，可容纳配置消息及紧随其后的
+状态查询，避免长模型名和思考强度字段导致底层接收丢字节。
 
 2026-10-23 已在 COM3 验证：应用分区刷写和校验、启动无数据画面、Windows
 真实数据同步、Fast 三种状态及未知状态、长模型名省略、三屏切换、串口占用后
 自动恢复，蓝牙和 HID 仍连接。87 项 Python 测试、65 项 native 测试通过，
 `xingzhi_parity` 与 `xingzhi_serial_meter` 构建通过。现场截图与旧应用分区备份
 保存在本机忽略目录 `backups/`，不提交原始设备数据。
+
+思考强度扩展已补充验证：89 项 Python 测试、67 项 native 测试及两个固件目标
+构建通过；实机确认 `[high]`、`[xhigh]`、`[--]` 和长模型名省略显示正常，连续
+三次 511 字节配置消息及状态回读成功。
 
 `xingzhi_parity` 固件在 USB CDC 上同时保留两类输入：
 

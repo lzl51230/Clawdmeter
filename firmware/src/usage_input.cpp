@@ -90,6 +90,8 @@ UsageParseResult parse_usage_payload(const char *payload, UsageData *out, CodexS
     if (has_config && settings) {
         snprintf(settings->model, sizeof(settings->model), "%s", doc["cfg"]["model"] | "");
         snprintf(settings->plan_model, sizeof(settings->plan_model), "%s", doc["cfg"]["plan_model"] | "");
+        snprintf(settings->reasoning_effort, sizeof(settings->reasoning_effort), "%s", doc["cfg"]["reasoning_effort"] | "");
+        snprintf(settings->plan_reasoning_effort, sizeof(settings->plan_reasoning_effort), "%s", doc["cfg"]["plan_reasoning_effort"] | "");
         snprintf(settings->service_tier, sizeof(settings->service_tier), "%s", doc["cfg"]["service_tier"] | "");
     }
     if (has_config && doc["ok"].isNull() && doc["s"].isNull() && doc["w"].isNull()) {

@@ -3,6 +3,8 @@
 struct CodexSettings {
     char model[64] = {};
     char plan_model[64] = {};
+    char reasoning_effort[16] = {};
+    char plan_reasoning_effort[16] = {};
     char service_tier[16] = {};
 };
 

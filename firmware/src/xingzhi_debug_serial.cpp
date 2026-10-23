@@ -109,9 +109,13 @@ int xingzhi_debug_format_status(const XingzhiDebugStatus *status, char *buf, siz
     char detail[40];
     char model[64];
     char plan_model[64];
+    char reasoning_effort[16];
+    char plan_reasoning_effort[16];
     char service_tier[16];
     sanitize_value(status->model, model, sizeof(model));
     sanitize_value(status->plan_model, plan_model, sizeof(plan_model));
+    sanitize_value(status->reasoning_effort, reasoning_effort, sizeof(reasoning_effort));
+    sanitize_value(status->plan_reasoning_effort, plan_reasoning_effort, sizeof(plan_reasoning_effort));
     sanitize_value(status->service_tier, service_tier, sizeof(service_tier));
     char ble_name[40];
     char action_error[40];
@@ -139,7 +143,7 @@ int xingzhi_debug_format_status(const XingzhiDebugStatus *status, char *buf, siz
     return snprintf(
         buf,
         len,
-        "XDBG STATUS target=%s screen=%s width=%d height=%d payload=%s source=%s model=%s plan_model=%s service_tier=%s ble=%s ble_name=%s ble_mac=%s hid=%s hid_battery=%s power=%s battery=%s charging=%s adc=%s samples=%s uptime_ms=%lu framebuffer=%s detail=%s action=%s event=%s action_count=%lu action_error=%s voice=%s voice_detail=%s voice_ms=%s voice_error=%s audio=%s audio_detail=%s audio_ms=%s audio_samples=%s audio_peak=%s audio_rms=%s audio_bytes=%s audio_error=%s voice_tx=%s voice_tx_detail=%s voice_tx_bytes=%s voice_tx_chunks=%s voice_tx_error=%s splash=%s splash_group=%s splash_category=%s splash_frame=%s",
+        "XDBG STATUS target=%s screen=%s width=%d height=%d payload=%s source=%s model=%s plan_model=%s reasoning_effort=%s plan_reasoning_effort=%s service_tier=%s ble=%s ble_name=%s ble_mac=%s hid=%s hid_battery=%s power=%s battery=%s charging=%s adc=%s samples=%s uptime_ms=%lu framebuffer=%s detail=%s action=%s event=%s action_count=%lu action_error=%s voice=%s voice_detail=%s voice_ms=%s voice_error=%s audio=%s audio_detail=%s audio_ms=%s audio_samples=%s audio_peak=%s audio_rms=%s audio_bytes=%s audio_error=%s voice_tx=%s voice_tx_detail=%s voice_tx_bytes=%s voice_tx_chunks=%s voice_tx_error=%s splash=%s splash_group=%s splash_category=%s splash_frame=%s",
         safe_value(status->target),
         safe_value(status->screen),
         status->width,
@@ -148,6 +152,8 @@ int xingzhi_debug_format_status(const XingzhiDebugStatus *status, char *buf, siz
         safe_value(status->source),
         model,
         plan_model,
+        reasoning_effort,
+        plan_reasoning_effort,
         service_tier,
         safe_value(status->ble),
         ble_name,

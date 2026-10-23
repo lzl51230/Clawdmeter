@@ -215,6 +215,8 @@ def read_codex_settings(codex_home: Path) -> dict[str, str]:
     return {
         "model": model,
         "plan_model": model,
+        "reasoning_effort": _display_token(config.get("model_reasoning_effort"), 15),
+        "plan_reasoning_effort": _display_token(config.get("plan_mode_reasoning_effort"), 15),
         "service_tier": _display_token(config.get("service_tier", "default"), 15),
     }
 
@@ -237,7 +239,10 @@ def poll_codex_local_usage(
     try:
         payload["cfg"] = read_codex_settings(home)
     except (OSError, ValueError):
-        payload["cfg"] = {"model": "", "plan_model": "", "service_tier": ""}
+        payload["cfg"] = {
+            "model": "", "plan_model": "", "service_tier": "",
+            "reasoning_effort": "", "plan_reasoning_effort": "",
+        }
         if on_warning:
             on_warning("Codex config is missing or invalid; displaying unknown settings")
     return compact_payload(payload)

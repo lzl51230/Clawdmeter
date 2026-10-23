@@ -22,5 +22,6 @@ enum class MeterPayloadState {
 void format_percent(float pct, bool valid, char *buf, size_t len);
 void format_reset_time(int mins, char *buf, size_t len);
 void format_payload_state(MeterPayloadState state, char *buf, size_t len);
+void format_model_with_effort(const char *model, const char *effort, char *buf, size_t len);
 MeterLevel meter_level_for(const UsageData *data, MeterPayloadState payload_state);
 int pct_to_bar_width(float pct, int max_width);

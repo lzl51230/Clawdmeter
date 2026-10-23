@@ -10,8 +10,9 @@ import windows_codex_usage_serial as serial_tool
 
 PAYLOAD = json.dumps({"s": 23, "w": 42, "ok": True, "src": "codex", "cfg": {
     "model": "example", "plan_model": "example", "service_tier": "fast",
+    "reasoning_effort": "high", "plan_reasoning_effort": "xhigh",
 }})
-STATUS = b"XDBG STATUS source=serial payload=valid model=example plan_model=example service_tier=fast\n"
+STATUS = b"XDBG STATUS source=serial payload=valid model=example plan_model=example service_tier=fast reasoning_effort=high plan_reasoning_effort=xhigh\n"
 
 
 class FakeSerial:
@@ -60,6 +61,13 @@ class CodexSerialTest(unittest.TestCase):
         payload = json.dumps({"src": "codex", "cfg": json.loads(PAYLOAD)["cfg"]})
         status = serial_tool.send_snapshot(payload, "COM3", 115200, 1, lambda *a, **k: port, lambda _: None)
         self.assertEqual(status["payload"], "none")
+
+    def test_wrong_effort_is_rejected_and_port_is_released(self):
+        port = FakeSerial()
+        port.lines = [STATUS.replace(b"plan_reasoning_effort=xhigh", b"plan_reasoning_effort=high")]
+        with self.assertRaisesRegex(RuntimeError, "plan_reasoning_effort"):
+            serial_tool.send_snapshot(PAYLOAD, "COM3", 115200, 1, lambda *a, **k: port, lambda _: None)
+        self.assertTrue(port.closed)
 
     def test_oversized_packet_never_opens_port(self):
         with self.assertRaises(ValueError):

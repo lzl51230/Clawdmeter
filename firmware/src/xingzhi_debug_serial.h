@@ -29,6 +29,8 @@ struct XingzhiDebugStatus {
     const char *source = "";
     const char *model = "";
     const char *plan_model = "";
+    const char *reasoning_effort = "";
+    const char *plan_reasoning_effort = "";
     const char *service_tier = "";
     const char *ble = "";
     const char *ble_name = "";

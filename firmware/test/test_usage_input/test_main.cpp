@@ -104,13 +104,15 @@ void test_settings_are_parsed_with_usage() {
     UsageData data = {};
     CodexSettings settings = {};
     auto result = parse_usage_payload(
-        "{\"s\":23,\"w\":42,\"ok\":true,\"cfg\":{\"model\":\"gpt-example\",\"plan_model\":\"gpt-plan\",\"service_tier\":\"ultrafast\"}}",
+        "{\"s\":23,\"w\":42,\"ok\":true,\"cfg\":{\"model\":\"gpt-example\",\"plan_model\":\"gpt-plan\",\"service_tier\":\"ultrafast\",\"reasoning_effort\":\"high\",\"plan_reasoning_effort\":\"xhigh\"}}",
         &data, &settings
     );
     TEST_ASSERT_EQUAL(UsageParseResult::Valid, result);
     TEST_ASSERT_EQUAL_STRING("gpt-example", settings.model);
     TEST_ASSERT_EQUAL_STRING("gpt-plan", settings.plan_model);
     TEST_ASSERT_EQUAL_STRING("ultrafast", settings.service_tier);
+    TEST_ASSERT_EQUAL_STRING("high", settings.reasoning_effort);
+    TEST_ASSERT_EQUAL_STRING("xhigh", settings.plan_reasoning_effort);
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 23, data.session_pct);
 }
 
@@ -119,7 +121,7 @@ void test_config_only_preserves_usage_and_legacy_preserves_settings() {
     data.session_pct = 37;
     data.valid = true;
     CodexSettings settings = {};
-    auto result = parse_usage_payload("{\"cfg\":{\"model\":\"example\",\"service_tier\":\"fast\"}}", &data, &settings);
+    auto result = parse_usage_payload("{\"cfg\":{\"model\":\"example\",\"service_tier\":\"fast\",\"reasoning_effort\":\"high\",\"plan_reasoning_effort\":\"xhigh\"}}", &data, &settings);
     TEST_ASSERT_EQUAL(UsageParseResult::ConfigOnly, result);
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 37, data.session_pct);
     TEST_ASSERT_TRUE(data.valid);
@@ -128,9 +130,14 @@ void test_config_only_preserves_usage_and_legacy_preserves_settings() {
     TEST_ASSERT_EQUAL(UsageParseResult::Valid, result);
     TEST_ASSERT_EQUAL_STRING("example", settings.model);
     TEST_ASSERT_EQUAL_STRING("fast", settings.service_tier);
+    TEST_ASSERT_EQUAL_STRING("high", settings.reasoning_effort);
+    TEST_ASSERT_EQUAL_STRING("xhigh", settings.plan_reasoning_effort);
     result = parse_usage_payload("{malformed", &data, &settings);
     TEST_ASSERT_EQUAL(UsageParseResult::InvalidJson, result);
     TEST_ASSERT_EQUAL_STRING("example", settings.model);
+    TEST_ASSERT_EQUAL(UsageParseResult::ConfigOnly, parse_usage_payload("{\"cfg\":{\"model\":\"old-sender\"}}", &data, &settings));
+    TEST_ASSERT_EQUAL_STRING("", settings.reasoning_effort);
+    TEST_ASSERT_EQUAL_STRING("", settings.plan_reasoning_effort);
 }
 
 void test_settings_lengths_and_unknown_fields() {
@@ -140,11 +147,13 @@ void test_settings_lengths_and_unknown_fields() {
     char long_model[100];
     memset(long_model, 'm', sizeof(long_model) - 1);
     long_model[sizeof(long_model) - 1] = '\0';
-    snprintf(input, sizeof(input), "{\"cfg\":{\"model\":\"%s\",\"plan_model\":17}}", long_model);
+    snprintf(input, sizeof(input), "{\"cfg\":{\"model\":\"%s\",\"plan_model\":17,\"reasoning_effort\":\"%s\",\"plan_reasoning_effort\":false}}", long_model, long_model);
     TEST_ASSERT_EQUAL(UsageParseResult::ConfigOnly, parse_usage_payload(input, &data, &settings));
     TEST_ASSERT_EQUAL(63, strlen(settings.model));
     TEST_ASSERT_EQUAL_STRING("", settings.plan_model);
     TEST_ASSERT_EQUAL_STRING("", settings.service_tier);
+    TEST_ASSERT_EQUAL(15, strlen(settings.reasoning_effort));
+    TEST_ASSERT_EQUAL_STRING("", settings.plan_reasoning_effort);
     TEST_ASSERT_EQUAL(UsageParseResult::ConfigOnly, parse_usage_payload("{\"cfg\":{}}", &data, &settings));
     TEST_ASSERT_EQUAL_STRING("", settings.model);
 }

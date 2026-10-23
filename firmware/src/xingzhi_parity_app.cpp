@@ -210,6 +210,8 @@ void send_status() {
     status.source = last_payload_source;
     status.model = codex_settings.model;
     status.plan_model = codex_settings.plan_model;
+    status.reasoning_effort = codex_settings.reasoning_effort;
+    status.plan_reasoning_effort = codex_settings.plan_reasoning_effort;
     status.service_tier = codex_settings.service_tier;
     status.ble = xingzhi_ble_state_name();
     status.ble_name = xingzhi_ble_device_name();
@@ -932,6 +934,7 @@ void log_config() {
 }  // namespace
 
 void setup() {
+    Serial.setRxBufferSize(UsageLineReader::kCapacity * 2);
     Serial.begin(115200);
     delay(800);
 
