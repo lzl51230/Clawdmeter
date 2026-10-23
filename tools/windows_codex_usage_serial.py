@@ -14,6 +14,37 @@ from codex_usage import DEFAULT_CODEX_SESSION_FILE_LIMIT, poll_codex_local_usage
 from xingzhi_debug import configure_serial, open_serial, read_status_response
 
 
+class SerialTarget:
+    def __init__(self, port: str):
+        self.port = port
+        self.identity: tuple | None = None
+
+    @staticmethod
+    def device_identity(port, field: str) -> tuple:
+        value = getattr(port, field, None)
+        if field == "device":
+            value = value.casefold()
+        return (field, getattr(port, "vid", None), getattr(port, "pid", None), value)
+
+    def resolve(self, ports) -> str | None:
+        if self.identity is None:
+            candidates = [port for port in ports if port.device.casefold() == self.port.casefold()]
+        else:
+            candidates = [port for port in ports
+                          if self.device_identity(port, self.identity[0]) == self.identity]
+        if len(candidates) > 1:
+            raise OSError("Multiple serial ports match the device; waiting for a unique match")
+        if not candidates:
+            return None
+        selected = candidates[0]
+        if self.identity is None:
+            field = next((field for field in ("serial_number", "location")
+                          if getattr(selected, field, None)), "device")
+            self.identity = self.device_identity(selected, field)
+        self.port = selected.device
+        return self.port
+
+
 def send_snapshot(
     payload: str,
     port: str,
@@ -27,10 +58,12 @@ def send_snapshot(
         raise ValueError("Payload exceeds the 511-byte device limit")
     expected = json.loads(payload)
     with open_serial(port, baud, timeout, serial_factory) as connection:
+        connection.write_timeout = timeout
         configure_serial(connection)
         sleep_fn(0.4)
-        connection.write(encoded + b"\nXDBG STATUS\n")
-        connection.flush()
+        packet = encoded + b"\nXDBG STATUS\n"
+        if connection.write(packet) != len(packet):
+            raise TimeoutError("Incomplete serial write")
         status = read_status_response(connection)
         if status.get("source") != "serial":
             raise RuntimeError("Device did not accept the serial update")
@@ -51,6 +84,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--codex-max-session-files", type=int, default=DEFAULT_CODEX_SESSION_FILE_LIMIT)
     parser.add_argument("--codex-limit-id", default="codex")
     parser.add_argument("--watch", action="store_true")
+    parser.add_argument("--follow-device", action=argparse.BooleanOptionalAction, default=False,
+                        help="In watch mode, follow the same USB device when its COM port changes")
     parser.add_argument("--poll-interval", type=float, default=60.0)
     parser.add_argument("--retry-delay", type=float, default=5.0)
     parser.add_argument("--dry-run", action="store_true", help="Print a snapshot without opening the serial port")
@@ -64,6 +99,8 @@ def run(
     serial_factory: Callable | None = None,
     sleep_fn: Callable[[float], None] = time.sleep,
     payload_provider: Callable[[], str] | None = None,
+    port_provider: Callable | None = None,
+    monotonic_fn: Callable[[], float] = time.monotonic,
 ) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -77,22 +114,43 @@ def run(
                 limit_id=args.codex_limit_id,
                 on_warning=lambda message: print(f"Warning: {message}", file=stderr, flush=True),
             )
+    target = SerialTarget(args.port) if args.watch and args.follow_device and not args.dry_run else None
+    active_port = args.port
+    next_update = 0.0
     try:
         while True:
             try:
+                if target is not None:
+                    if port_provider is None:
+                        from serial.tools import list_ports
+                        port_provider = list_ports.comports
+                    selected_port = target.resolve(port_provider())
+                    if selected_port is None:
+                        raise OSError("Device unavailable; waiting for reconnect")
+                    if selected_port != active_port:
+                        print(f"Serial port changed: {active_port} -> {selected_port}", file=stdout, flush=True)
+                        active_port = selected_port
+                        next_update = 0.0
+                    remaining = next_update - monotonic_fn()
+                    if remaining > 0:
+                        sleep_fn(min(args.retry_delay, remaining))
+                        continue
                 payload = payload_provider()
                 print(f"Payload: {payload}", file=stdout, flush=True)
                 if args.dry_run:
                     return 0
-                status = send_snapshot(payload, args.port, args.baud, args.timeout, serial_factory, sleep_fn)
-                print(f"Serial update verified: {args.port}, payload={status.get('payload')}", file=stdout, flush=True)
+                status = send_snapshot(payload, active_port, args.baud, args.timeout, serial_factory, sleep_fn)
+                print(f"Serial update verified: {active_port}, payload={status.get('payload')}", file=stdout, flush=True)
                 if not args.watch:
                     return 0
-                delay = args.poll_interval
+                next_update = monotonic_fn() + args.poll_interval
+                delay = min(args.retry_delay, args.poll_interval) if target is not None else args.poll_interval
             except Exception as exc:
-                print(f"Serial update failed on {args.port}: {exc}", file=stderr, flush=True)
+                next_update = 0.0
+                print(f"Serial update failed on {active_port}: {exc}", file=stderr, flush=True)
                 if not args.watch:
                     return 1
+                print(f"Waiting for device; retrying in {args.retry_delay:g}s (Ctrl+C to stop)", file=stderr, flush=True)
                 delay = args.retry_delay
             sleep_fn(delay)
     except KeyboardInterrupt:

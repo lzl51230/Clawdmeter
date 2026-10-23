@@ -19,6 +19,11 @@ The Clawd animations come from [claudepix](https://claudepix.vercel.app), [@amaa
 Windows 本机用量与模型状态可通过 USB 串口同步。连接设备后运行
 `codexWatch.bat`；默认端口为 `COM3`、波特率为 `115200`，每 60 秒刷新。
 可以执行 `codexWatch.bat --port COM7 --poll-interval 30` 覆盖参数。
+设备拔出后程序会持续等待，每 5 秒检查一次；检测到重新插入后立即读取并发送最新数据。
+首次从指定端口识别设备后，会按 USB 序列号跟随同一设备，即使 COM 端口号改变也能恢复。
+没有序列号时使用 USB 位置匹配；两者都不可用时仅等待原端口。匹配到多个设备时继续等待，
+不自动选取其中一个。启动时尚未识别过设备，则先等待指定端口出现。
+可用 `--retry-delay 2` 调整检查与重试间隔，或用 `--no-follow-device` 关闭设备跟随。
 它读取本机 `CODEX_HOME`（未设置时为 `%USERPROFILE%\.codex`），不自动使用 WSL。
 主画面显示默认模型、Plan 继承的模型、Fast/Ultrafast 档位，以及两项用量。
 配置或用量缺失时显示未知，不生成虚假的 0% 用量。
