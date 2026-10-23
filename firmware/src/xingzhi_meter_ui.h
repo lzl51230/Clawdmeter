@@ -12,6 +12,7 @@
 struct XingzhiUiState {
     XingzhiScreen screen = XingzhiScreen::Usage;
     const UsageData *data = nullptr;
+    const CodexSettings *codex_settings = nullptr;
     MeterPayloadState payload_state = MeterPayloadState::NoData;
     const char *detail = "";
     const char *last_source = "none";

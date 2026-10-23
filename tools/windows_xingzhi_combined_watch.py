@@ -316,6 +316,11 @@ def build_payload_provider(args: argparse.Namespace, opener: Callable, now_fn: C
             return usage_tool.build_preset_payload(args.test_preset)
         if args.usage_source == "claude":
             return usage_tool.poll_claude_usage(args.credentials, opener=opener, now_fn=now_fn)
+        if args.usage_source == "codex-local":
+            return usage_tool.poll_codex_local_usage(
+                args.codex_home, now_fn=now_fn,
+                max_session_files=args.codex_max_session_files, limit_id=args.codex_limit_id,
+            )
         if args.usage_source == "codex-wsl":
             return usage_tool.poll_codex_wsl_usage(
                 args.codex_home.expanduser() if args.codex_home else None,
@@ -386,7 +391,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--poll-interval", type=float, default=60.0, help="Seconds between usage polls")
     parser.add_argument(
         "--usage-source",
-        choices=["claude", "codex-wsl"],
+        choices=["claude", "codex-wsl", "codex-local"],
         default="codex-wsl",
         help="Usage data source when --test-preset is not set",
     )

@@ -16,6 +16,23 @@ The Clawd animations come from [claudepix](https://claudepix.vercel.app), [@amaa
 
 ## Screens
 
+Windows 本机用量与模型状态可通过 USB 串口同步。连接设备后运行
+`codexWatch.bat`；默认端口为 `COM3`、波特率为 `115200`，每 60 秒刷新。
+可以执行 `codexWatch.bat --port COM7 --poll-interval 30` 覆盖参数。
+它读取本机 `CODEX_HOME`（未设置时为 `%USERPROFILE%\.codex`），不自动使用 WSL。
+主画面显示默认模型、Plan 继承的模型、Fast/Ultrafast 档位，以及两项用量。
+配置或用量缺失时显示未知，不生成虚假的 0% 用量。
+
+每次同步后程序会释放串口，方便间隔期间运行 `xingzhi_debug.py`；刷机前应先
+按 Ctrl+C 退出 watcher。BLE/HID 功能保留，使用串口同步时不要同时启动 BLE
+用量 watcher，避免两路数据交替覆盖。
+
+仅检查数据、不连接设备：
+
+```powershell
+py -3 tools\windows_codex_usage_serial.py --dry-run
+```
+
 The Xingzhi parity target boots into the usage screen. The UI button cycles
 between Usage, Status, and Splash. While the splash is up, a short press cycles
 Clawd animations and a long press returns to the previous non-splash screen.

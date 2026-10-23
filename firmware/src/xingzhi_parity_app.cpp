@@ -56,6 +56,7 @@ XingzhiST7789 panel(
 Arduino_Canvas canvas(DISPLAY_WIDTH, DISPLAY_HEIGHT, &panel);
 UsageLineReader line_reader;
 UsageData usage = {};
+CodexSettings codex_settings = {};
 MeterPayloadState payload_state = MeterPayloadState::NoData;
 char payload_detail[40] = {};
 const char *last_payload_source = "none";
@@ -109,6 +110,7 @@ void draw_meter() {
     XingzhiUiState state = {};
     state.screen = action_state.current_screen;
     state.data = &usage;
+    state.codex_settings = &codex_settings;
     state.payload_state = payload_state;
     state.detail = payload_detail;
     state.last_source = last_payload_source;
@@ -134,7 +136,7 @@ void draw_meter() {
 }
 
 void send_status() {
-    char line[1400];
+    char line[1800];
     char battery[8];
     char charging[4];
     char adc[20];
@@ -206,6 +208,9 @@ void send_status() {
     status.height = DISPLAY_HEIGHT;
     status.payload = payload_state_name();
     status.source = last_payload_source;
+    status.model = codex_settings.model;
+    status.plan_model = codex_settings.plan_model;
+    status.service_tier = codex_settings.service_tier;
     status.ble = xingzhi_ble_state_name();
     status.ble_name = xingzhi_ble_device_name();
     status.ble_mac = xingzhi_ble_mac();
@@ -502,15 +507,21 @@ void sample_usage_rate(float session_pct) {
 
 void handle_payload_line(const char *line) {
     UsageData parsed = {};
-    UsageParseResult result = parse_usage_payload(line, &parsed);
+    UsageParseResult result = parse_usage_payload(line, &parsed, &codex_settings);
 
     switch (result) {
+    case UsageParseResult::ConfigOnly:
+        last_payload_source = "serial";
+        Serial.println("Codex settings updated");
+        break;
     case UsageParseResult::Valid:
         usage = parsed;
         payload_state = MeterPayloadState::Valid;
         last_payload_source = "serial";
         set_detail(parsed.status);
-        sample_usage_rate(parsed.session_pct);
+        if (parsed.session_valid) {
+            sample_usage_rate(parsed.session_pct);
+        }
         Serial.printf(
             "Usage update: session=%.1f weekly=%.1f status=%s\n",
             usage.session_pct,
@@ -540,15 +551,21 @@ void handle_payload_line(const char *line) {
 
 void handle_ble_payload_line(const char *line) {
     UsageData parsed = {};
-    UsageParseResult result = parse_usage_payload(line, &parsed);
+    UsageParseResult result = parse_usage_payload(line, &parsed, &codex_settings);
 
     switch (result) {
+    case UsageParseResult::ConfigOnly:
+        last_payload_source = "ble";
+        xingzhi_ble_send_ack();
+        break;
     case UsageParseResult::Valid:
         usage = parsed;
         payload_state = MeterPayloadState::Valid;
         last_payload_source = "ble";
         set_detail(parsed.status);
-        sample_usage_rate(parsed.session_pct);
+        if (parsed.session_valid) {
+            sample_usage_rate(parsed.session_pct);
+        }
         snprintf(last_ble_detail, sizeof(last_ble_detail), "rx ok");
         xingzhi_ble_send_ack();
         Serial.printf(

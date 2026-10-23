@@ -27,6 +27,9 @@ struct XingzhiDebugStatus {
     int height = 0;
     const char *payload = "";
     const char *source = "";
+    const char *model = "";
+    const char *plan_model = "";
+    const char *service_tier = "";
     const char *ble = "";
     const char *ble_name = "";
     const char *ble_mac = "";

@@ -7,6 +7,7 @@
 enum class UsageParseResult {
     Empty,
     Valid,
+    ConfigOnly,
     ErrorPayload,
     InvalidJson,
 };
@@ -19,7 +20,7 @@ enum class UsageLineResult {
 
 class UsageLineReader {
 public:
-    static constexpr size_t kCapacity = 192;
+    static constexpr size_t kCapacity = 512;
 
     UsageLineResult push(char c);
     const char *line() const { return line_; }
@@ -31,4 +32,4 @@ private:
     bool overflow_ = false;
 };
 
-UsageParseResult parse_usage_payload(const char *payload, UsageData *out);
+UsageParseResult parse_usage_payload(const char *payload, UsageData *out, CodexSettings *settings = nullptr);

@@ -63,7 +63,13 @@ void draw_clipped_text(
     uint8_t size = 1
 ) {
     char clipped[36];
+    if (max_chars >= sizeof(clipped)) {
+        max_chars = sizeof(clipped) - 1;
+    }
     snprintf(clipped, sizeof(clipped), "%.*s", static_cast<int>(max_chars), text ? text : "-");
+    if (text && strlen(text) > max_chars && max_chars >= 3) {
+        memcpy(clipped + max_chars - 3, "...", 3);
+    }
     draw_text(display, x, y, clipped, color, size);
 }
 
@@ -85,7 +91,8 @@ void draw_usage_row(
     float pct,
     int reset_mins,
     bool valid,
-    uint16_t color
+    uint16_t color,
+    bool compact = false
 ) {
     char pct_buf[8];
     char reset_buf[24];
@@ -93,9 +100,9 @@ void draw_usage_row(
     format_reset_time(reset_mins, reset_buf, sizeof(reset_buf));
 
     draw_text(display, 18, y, label, COLOR_DIM);
-    draw_text(display, 18, y + 17, pct_buf, COLOR_TEXT, 3);
-    draw_text(display, 123, y + 22, reset_buf, COLOR_DIM);
-    draw_bar(display, 18, y + 50, 204, 16, pct, valid, color);
+    draw_text(display, 18, y + (compact ? 12 : 17), pct_buf, COLOR_TEXT, compact ? 2 : 3);
+    draw_text(display, 116, y + (compact ? 17 : 22), reset_buf, COLOR_DIM);
+    draw_bar(display, 18, y + (compact ? 32 : 50), 204, compact ? 10 : 16, pct, valid, color);
 }
 
 void draw_frame(Arduino_GFX *display, uint16_t accent) {
@@ -178,10 +185,6 @@ void draw_power_badge(Arduino_GFX *display, const XingzhiUiState *state) {
     }
 }
 
-const char *usage_title_for(const UsageData *data) {
-    return data && strcmp(data->provider, "codex") == 0 ? "Codex" : "Claude";
-}
-
 void draw_key_value(
     Arduino_GFX *display,
     int16_t y,
@@ -203,30 +206,50 @@ void draw_usage_screen(
     const bool has_data = data && data->valid;
     const MeterLevel level = meter_level_for(data, payload_state);
     const uint16_t accent = level_color(level);
-
     UsageData empty = {};
     empty.session_reset_mins = -1;
     empty.weekly_reset_mins = -1;
     const UsageData *view = data ? data : &empty;
 
-    char payload_buf[24];
-    format_payload_state(payload_state, payload_buf, sizeof(payload_buf));
-
     draw_frame(display, accent);
-    draw_header(display, usage_title_for(view), level_label(level), accent);
-
-    draw_usage_row(display, 48, "SESSION", view->session_pct, view->session_reset_mins, has_data, accent);
-    draw_usage_row(display, 122, "WEEKLY", view->weekly_pct, view->weekly_reset_mins, has_data, accent);
-
-    display->drawFastHLine(16, 198, 208, COLOR_PANEL);
-    draw_text(display, 18, 207, payload_buf, payload_state == MeterPayloadState::Invalid ? COLOR_RED : COLOR_DIM);
-
-    if (detail && detail[0]) {
-        draw_clipped_text(display, 18, 222, detail, COLOR_DIM, 24);
-    } else if (payload_state == MeterPayloadState::NoData) {
-        draw_text(display, 18, 222, "Send JSON line on COM7", COLOR_DIM);
+    draw_header(display, "Codex", level_label(level), accent);
+    if (state) {
+        const CodexSettings *config = state->codex_settings;
+        const char *model = config && config->model[0] ? config->model : "--";
+        const char *plan = config && config->plan_model[0] ? config->plan_model : "--";
+        const char *tier = config ? config->service_tier : "";
+        const char *speed = "--";
+        if (strcmp(tier, "fast") == 0 || strcmp(tier, "priority") == 0) {
+            speed = "ON";
+        } else if (strcmp(tier, "ultrafast") == 0) {
+            speed = "ULTRAFAST";
+        } else if (strcmp(tier, "default") == 0 || strcmp(tier, "flex") == 0) {
+            speed = "OFF";
+        }
+        draw_text(display, 18, 43, "DEFAULT", COLOR_DIM);
+        draw_clipped_text(display, 72, 43, model, COLOR_TEXT, 25);
+        draw_text(display, 18, 59, "PLAN", COLOR_DIM);
+        draw_clipped_text(display, 72, 59, plan, COLOR_TEXT, 25);
+        draw_text(display, 18, 75, "FAST", COLOR_DIM);
+        draw_text(display, 72, 75, speed, strcmp(speed, "--") == 0 ? COLOR_DIM : COLOR_TEXT);
+        display->drawFastHLine(16, 92, 208, COLOR_PANEL);
+        draw_usage_row(display, 103, "SESSION", view->session_pct, view->session_reset_mins, has_data && view->session_valid, accent, true);
+        draw_usage_row(display, 156, "WEEKLY", view->weekly_pct, view->weekly_reset_mins, has_data && view->weekly_valid, accent, true);
+        display->drawFastHLine(16, 210, 208, COLOR_PANEL);
+        char footer[40];
+        snprintf(footer, sizeof(footer), "%s | %s", state->last_source, has_data ? "Payload OK" : "Waiting for usage");
+        if (payload_state == MeterPayloadState::Invalid) {
+            snprintf(footer, sizeof(footer), "%s | %s", state->last_source, detail && detail[0] ? detail : "Invalid payload");
+        }
+        draw_clipped_text(display, 18, 222, footer, payload_state == MeterPayloadState::Invalid ? COLOR_RED : COLOR_DIM, 34);
+    } else {
+        draw_usage_row(display, 48, "SESSION", view->session_pct, view->session_reset_mins, has_data && view->session_valid, accent);
+        draw_usage_row(display, 122, "WEEKLY", view->weekly_pct, view->weekly_reset_mins, has_data && view->weekly_valid, accent);
+        char payload_buf[24];
+        format_payload_state(payload_state, payload_buf, sizeof(payload_buf));
+        draw_text(display, 18, 207, payload_buf, COLOR_DIM);
+        draw_clipped_text(display, 18, 222, detail, COLOR_DIM, 34);
     }
-
     draw_power_badge(display, state);
 }
 

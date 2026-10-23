@@ -1,5 +1,28 @@
 # Xingzhi 串口调试
 
+## Windows 本机 Codex 串口同步
+
+运行仓库根目录的 `codexWatch.bat`，默认通过 `COM3`、115200 波特率同步
+Windows 本机 Codex，每 60 秒刷新一次。使用 `codexWatch.bat --port COM7`
+覆盖端口，或用 `--codex-home` 指定数据目录；此入口不会自动查询 WSL。
+
+主画面始终显示 `Codex`，并显示 `DEFAULT`、`PLAN`、`FAST` 和两项用量。
+Plan 当前继承默认模型，`plan_mode_reasoning_effort` 不作为模型名读取。
+Fast 的显示值为 `ON`、`OFF`、`ULTRAFAST` 或未知值 `--`。用量按日志中的
+`window_minutes` 分配到 SESSION（300 分钟）和 WEEKLY（10080 分钟）；缺失窗口
+显示 `--%`，而不是 0%。
+
+扩展 JSON 的可选 `cfg` 对象包含 `model`、`plan_model`、`service_tier`。
+仅发送 `cfg` 和 `src` 可更新模型状态而不覆盖已有用量。主机每次发送后查询
+`XDBG STATUS`，核对 `source=serial`、配置字段和用量接收状态，随后关闭串口。
+串口忙或断开后默认每 5 秒重试；刷机前用 Ctrl+C 退出 watcher。
+
+2026-10-23 已在 COM3 验证：应用分区刷写和校验、启动无数据画面、Windows
+真实数据同步、Fast 三种状态及未知状态、长模型名省略、三屏切换、串口占用后
+自动恢复，蓝牙和 HID 仍连接。87 项 Python 测试、65 项 native 测试通过，
+`xingzhi_parity` 与 `xingzhi_serial_meter` 构建通过。现场截图与旧应用分区备份
+保存在本机忽略目录 `backups/`，不提交原始设备数据。
+
 `xingzhi_parity` 固件在 USB CDC 上同时保留两类输入：
 
 - JSON 用量 payload：以 `{` 开头，沿用 `tools/send_test_payload.py` 的 newline-delimited JSON。

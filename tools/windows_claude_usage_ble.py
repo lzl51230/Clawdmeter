@@ -6,9 +6,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import os
 from pathlib import Path
-import subprocess
 import sys
 import time
 from typing import Any, Callable, Mapping, TextIO
@@ -33,13 +31,22 @@ from xingzhi_ble_common import (  # noqa: E402
     select_device,
 )
 
+from codex_usage import (  # noqa: E402
+    DEFAULT_CODEX_SESSION_FILE_LIMIT,
+    DEFAULT_CODEX_LIMIT_ID,
+    MissingCodexUsageError,
+    build_payload_from_codex_rate_limits,
+    poll_codex_wsl_usage,
+    poll_codex_local_usage,
+    read_latest_codex_rate_limits,
+    resolve_default_codex_home,
+)
+
 RX_CHAR_UUID = "4c41555a-4465-7669-6365-000000000002"
 TX_CHAR_UUID = "4c41555a-4465-7669-6365-000000000003"
 REQ_CHAR_UUID = "4c41555a-4465-7669-6365-000000000004"
 CLAUDE_MESSAGES_URL = "https://api.anthropic.com/v1/messages"
 DEFAULT_CREDENTIALS = Path.home() / ".claude" / ".credentials.json"
-DEFAULT_CODEX_SESSION_FILE_LIMIT = 200
-DEFAULT_CODEX_LIMIT_ID = "codex"
 
 PRESETS = {
     "normal": {"s": 42, "sr": 37, "w": 28, "wr": 720, "st": "allowed", "ok": True},
@@ -50,10 +57,6 @@ PRESETS = {
 
 class MissingCredentialsError(RuntimeError):
     """Raised when Claude credentials are unavailable."""
-
-
-class MissingCodexUsageError(RuntimeError):
-    """Raised when Codex local usage data is unavailable."""
 
 
 class NotificationState:
@@ -180,149 +183,6 @@ def poll_claude_usage(
     )
     with opener(req, timeout=timeout) as response:
         return build_payload_from_headers(response.headers, now=int(now_fn()))
-
-
-def _number(value: Any, default: float = 0.0) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def _codex_limit_reset_minutes(limit: Mapping[str, Any], now: int) -> int:
-    reset_at = limit.get("resets_at", limit.get("reset_at"))
-    if reset_at is not None:
-        return _reset_minutes(str(reset_at), now)
-
-    reset_after_seconds = limit.get("reset_after_seconds")
-    if reset_after_seconds is None:
-        return -1
-    return max(0, int(round(_number(reset_after_seconds) / 60.0)))
-
-
-def _codex_status(rate_limits: Mapping[str, Any], session_percent: int, weekly_percent: int) -> str:
-    if rate_limits.get("rate_limit_reached_type") or rate_limits.get("limit_reached") is True:
-        return "limited"
-    if rate_limits.get("allowed") is False:
-        return "limited"
-    if session_percent >= 100 or weekly_percent >= 100:
-        return "limited"
-    return "allowed"
-
-
-def build_payload_from_codex_rate_limits(rate_limits: Mapping[str, Any], now: int | None = None) -> str:
-    now = int(time.time()) if now is None else now
-    primary = rate_limits.get("primary") if isinstance(rate_limits.get("primary"), Mapping) else {}
-    secondary = rate_limits.get("secondary") if isinstance(rate_limits.get("secondary"), Mapping) else {}
-    session_percent = _usage_percent(str(primary.get("used_percent", "0")))
-    weekly_percent = _usage_percent(str(secondary.get("used_percent", "0")))
-    payload = {
-        "s": session_percent,
-        "sr": _codex_limit_reset_minutes(primary, now),
-        "w": weekly_percent,
-        "wr": _codex_limit_reset_minutes(secondary, now),
-        "st": _codex_status(rate_limits, session_percent, weekly_percent),
-        "src": "codex",
-        "ok": True,
-    }
-    return compact_payload(payload)
-
-
-def resolve_default_codex_home(wsl_distro: str | None = None) -> Path:
-    configured = os.environ.get("CODEX_HOME")
-    if configured:
-        return Path(configured).expanduser()
-
-    if sys.platform.startswith("win"):
-        command = 'wslpath -w "${CODEX_HOME:-$HOME/.codex}"'
-        args = ["wsl.exe"]
-        if wsl_distro:
-            args.extend(["-d", wsl_distro])
-        args.extend(["sh", "-lc", command])
-        try:
-            output = subprocess.check_output(args, stderr=subprocess.DEVNULL, text=True, timeout=5).strip()
-        except (FileNotFoundError, subprocess.SubprocessError):
-            output = ""
-        if output:
-            return Path(output)
-
-    return Path.home() / ".codex"
-
-
-def _codex_session_files(codex_home: Path, max_files: int) -> list[Path]:
-    sessions_dir = codex_home / "sessions"
-    if not sessions_dir.exists():
-        raise MissingCodexUsageError(f"Codex sessions directory not found: {sessions_dir}")
-
-    files = list(sessions_dir.rglob("*.jsonl"))
-    files.sort(key=lambda path: path.stat().st_mtime, reverse=True)
-    return files[:max(1, max_files)]
-
-
-def _codex_rate_limits_from_event(event: Mapping[str, Any]) -> Mapping[str, Any] | None:
-    payload = event.get("payload")
-    if not isinstance(payload, Mapping) or payload.get("type") != "token_count":
-        return None
-
-    rate_limits = payload.get("rate_limits") or event.get("rate_limits")
-    if isinstance(rate_limits, Mapping) and rate_limits:
-        return rate_limits
-    return None
-
-
-def read_latest_codex_rate_limits(
-    codex_home: Path,
-    max_files: int = DEFAULT_CODEX_SESSION_FILE_LIMIT,
-    limit_id: str | None = DEFAULT_CODEX_LIMIT_ID,
-) -> Mapping[str, Any]:
-    best_timestamp = ""
-    best_rate_limits: Mapping[str, Any] | None = None
-    fallback_timestamp = ""
-    fallback_rate_limits: Mapping[str, Any] | None = None
-    match_any_limit = not limit_id or limit_id == "all"
-    for path in _codex_session_files(codex_home, max_files):
-        try:
-            lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
-        except OSError:
-            continue
-
-        for line in lines:
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            rate_limits = _codex_rate_limits_from_event(event)
-            if not rate_limits:
-                continue
-            timestamp = str(event.get("timestamp", ""))
-            event_limit_id = rate_limits.get("limit_id")
-            if match_any_limit or str(event_limit_id) == limit_id:
-                if not best_rate_limits or timestamp >= best_timestamp:
-                    best_timestamp = timestamp
-                    best_rate_limits = rate_limits
-            elif event_limit_id is None:
-                if not fallback_rate_limits or timestamp >= fallback_timestamp:
-                    fallback_timestamp = timestamp
-                    fallback_rate_limits = rate_limits
-
-    if best_rate_limits:
-        return best_rate_limits
-    if fallback_rate_limits:
-        return fallback_rate_limits
-    limit_hint = "" if match_any_limit else f" for limit_id={limit_id}"
-    raise MissingCodexUsageError(f"Codex token_count rate limits{limit_hint} not found under: {codex_home / 'sessions'}")
-
-
-def poll_codex_wsl_usage(
-    codex_home: Path | None = None,
-    now_fn: Callable[[], float] = time.time,
-    max_session_files: int = DEFAULT_CODEX_SESSION_FILE_LIMIT,
-    wsl_distro: str | None = None,
-    limit_id: str | None = DEFAULT_CODEX_LIMIT_ID,
-) -> str:
-    resolved_home = codex_home or resolve_default_codex_home(wsl_distro)
-    rate_limits = read_latest_codex_rate_limits(resolved_home, max_files=max_session_files, limit_id=limit_id)
-    return build_payload_from_codex_rate_limits(rate_limits, now=int(now_fn()))
 
 
 def _decode_notification(data: bytes | bytearray | memoryview) -> str:
@@ -456,7 +316,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--watch", action="store_true", help="Keep running and poll repeatedly")
     parser.add_argument(
         "--usage-source",
-        choices=["claude", "codex-wsl"],
+        choices=["claude", "codex-wsl", "codex-local"],
         default="codex-wsl",
         help="Usage data source when --test-preset is not set (default: codex-wsl)",
     )
@@ -494,6 +354,11 @@ def run(
             return build_preset_payload(args.test_preset)
         if args.usage_source == "claude":
             return poll_claude_usage(args.credentials, opener=opener, now_fn=now_fn)
+        if args.usage_source == "codex-local":
+            return poll_codex_local_usage(
+                args.codex_home, now_fn=now_fn,
+                max_session_files=args.codex_max_session_files, limit_id=args.codex_limit_id,
+            )
         if args.usage_source == "codex-wsl":
             return poll_codex_wsl_usage(
                 args.codex_home.expanduser() if args.codex_home else None,
