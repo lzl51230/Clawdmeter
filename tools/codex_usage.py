@@ -8,10 +8,12 @@ from pathlib import Path
 import subprocess
 import sys
 import time
-from typing import Any, Callable, Mapping
+from typing import Any, BinaryIO, Callable, Iterator, Mapping
 
 DEFAULT_CODEX_SESSION_FILE_LIMIT = 200
 DEFAULT_CODEX_LIMIT_ID = "codex"
+CODEX_READ_BLOCK_BYTES = 64 * 1024
+CODEX_MAX_LINE_BYTES = 1024 * 1024
 
 
 class MissingCodexUsageError(RuntimeError):
@@ -115,9 +117,44 @@ def _codex_session_files(codex_home: Path, max_files: int) -> list[Path]:
     if not sessions_dir.exists():
         raise MissingCodexUsageError(f"Codex sessions directory not found: {sessions_dir}")
 
-    files = list(sessions_dir.rglob("*.jsonl"))
-    files.sort(key=lambda path: path.stat().st_mtime, reverse=True)
-    return files[:max(1, max_files)]
+    files = []
+    for path in sessions_dir.rglob("*.jsonl"):
+        try:
+            files.append((path.stat().st_mtime_ns, path))
+        except OSError:
+            continue
+    files.sort(key=lambda entry: entry[0], reverse=True)
+    return [path for _, path in files[:max(1, max_files)]]
+
+
+def _iter_codex_lines_reverse(log_file: BinaryIO) -> Iterator[bytes]:
+    """从打开时的文件尾部反向读取，缓冲大小不随文件或超长行增长。"""
+    position = os.fstat(log_file.fileno()).st_size
+    pending = b""
+    oversized = False
+    while position:
+        size = min(position, CODEX_READ_BLOCK_BYTES)
+        position -= size
+        log_file.seek(position)
+        block = log_file.read(size)
+        if len(block) != size:
+            raise OSError("Codex session was truncated while reading")
+        parts = block.split(b"\n")
+        for index in range(len(parts) - 1, -1, -1):
+            part = parts[index]
+            if not oversized:
+                if len(part) + len(pending) > CODEX_MAX_LINE_BYTES:
+                    pending = b""
+                    oversized = True
+                else:
+                    pending = part + pending
+            if index:
+                if not oversized and pending:
+                    yield pending
+                pending = b""
+                oversized = False
+    if not oversized and pending:
+        yield pending
 
 
 def _codex_rate_limits_from_event(event: Mapping[str, Any]) -> Mapping[str, Any] | None:
@@ -136,40 +173,32 @@ def read_latest_codex_rate_limits(
     max_files: int = DEFAULT_CODEX_SESSION_FILE_LIMIT,
     limit_id: str | None = DEFAULT_CODEX_LIMIT_ID,
 ) -> Mapping[str, Any]:
-    best_timestamp = ""
-    best_rate_limits: Mapping[str, Any] | None = None
-    fallback_timestamp = ""
-    fallback_rate_limits: Mapping[str, Any] | None = None
+    # 最近活跃会话优先；单个会话内按追加顺序选择最后一条匹配记录。
     match_any_limit = not limit_id or limit_id == "all"
     for path in _codex_session_files(codex_home, max_files):
+        fallback_rate_limits = None
         try:
-            lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+            with path.open("rb") as log_file:
+                for line in _iter_codex_lines_reverse(log_file):
+                    try:
+                        event = json.loads(line)
+                    except (ValueError, UnicodeDecodeError, RecursionError):
+                        continue
+                    if not isinstance(event, Mapping):
+                        continue
+                    rate_limits = _codex_rate_limits_from_event(event)
+                    if not rate_limits:
+                        continue
+                    event_limit_id = rate_limits.get("limit_id")
+                    if match_any_limit or str(event_limit_id) == limit_id:
+                        return rate_limits
+                    if event_limit_id is None and fallback_rate_limits is None:
+                        fallback_rate_limits = rate_limits
         except OSError:
             continue
+        if fallback_rate_limits:
+            return fallback_rate_limits
 
-        for line in lines:
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            rate_limits = _codex_rate_limits_from_event(event)
-            if not rate_limits:
-                continue
-            timestamp = str(event.get("timestamp", ""))
-            event_limit_id = rate_limits.get("limit_id")
-            if match_any_limit or str(event_limit_id) == limit_id:
-                if not best_rate_limits or timestamp >= best_timestamp:
-                    best_timestamp = timestamp
-                    best_rate_limits = rate_limits
-            elif event_limit_id is None:
-                if not fallback_rate_limits or timestamp >= fallback_timestamp:
-                    fallback_timestamp = timestamp
-                    fallback_rate_limits = rate_limits
-
-    if best_rate_limits:
-        return best_rate_limits
-    if fallback_rate_limits:
-        return fallback_rate_limits
     limit_hint = "" if match_any_limit else f" for limit_id={limit_id}"
     raise MissingCodexUsageError(f"Codex token_count rate limits{limit_hint} not found under: {codex_home / 'sessions'}")
 

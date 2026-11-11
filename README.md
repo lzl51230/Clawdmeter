@@ -179,6 +179,13 @@ python3 -m pip install --user --break-system-packages pyserial
 读取本机 `CODEX_HOME`，未设置时使用 `~/.codex`。`--no-follow-device` 可关闭设备跟随，
 自动识别模式下会固定使用首次选中的端口。每次同步后释放串口，刷机前先停止 watcher。
 如果下载或解压方式丢失执行权限，运行 `chmod +x codexWatch.command` 后再双击。
+
+串口和 BLE 共用的 Codex 采集器优先读取最近修改的会话，从文件尾部反向查找最后一条
+匹配 `--codex-limit-id` 的用量；找不到时才回退旧会话，最多检查
+`--codex-max-session-files` 个文件（默认 200）。单个会话内优先精确匹配，找不到时兼容
+无 `limit_id` 的旧记录；不再跨会话比较事件时间戳。每次读取 64 KiB，超过 1 MiB 的单行
+会被跳过，避免大日志或大段工具输出撑大内存。更新采集脚本后需重启 watcher 才会生效。
+
 本节覆盖 USB Codex 同步；下文的 `systemctl` 和 BlueZ 安装流程仍是 Linux 专用。
 
 ## Flash the firmware
